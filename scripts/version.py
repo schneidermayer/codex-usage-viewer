@@ -27,7 +27,8 @@ def version_info(root=ROOT):
             args += ["--match", candidate]
         tag = git(root, *args)
     count = int(git(root, "rev-list", "--count", f"{tag}..HEAD" if tag else "HEAD"))
-    return {"base": base, "display": f"{base}-{count}", "commitsSinceRelease": count,
+    display = base if tag == base and count == 0 else f"{base}-{count}"
+    return {"base": base, "display": display, "commitsSinceRelease": count,
             "releaseTag": tag, "commit": git(root, "rev-parse", "HEAD"),
             "build": str(int(git(root, "rev-list", "--count", "HEAD")))}
 

@@ -96,7 +96,7 @@ final class CodexUsageViewerUITests: XCTestCase {
         defer { app.terminate() }
         let version = app.staticTexts["codexusageviewer.version"]
         let versionText = visibleText(version)
-        XCTAssertTrue(versionText.hasPrefix("Version 1.0-"))
+        XCTAssertTrue(versionText == "Version 1.0" || versionText.hasPrefix("Version 1.0-"))
         for text in ["CODEX USAGE, IN ONE PLACE", "A little more headspace.", "Three accounts. A clear view of what’s left.", "YOUR ACCOUNTS"] {
             XCTAssertFalse(app.staticTexts[text].exists)
         }

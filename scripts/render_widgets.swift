@@ -79,7 +79,7 @@ struct RenderWidgets {
         - `connected`: three synthetic accounts reporting 58%, 21%, and 77% weekly usage remaining, with 3d12h, 18h30m, and 6d2h until reset. The third account reports weekly usage in its primary slot.
         - `empty`: three unconnected accounts; no usage values are invented.
         - `attention`: the first account is stale, the second has an elapsed weekly reset, and the third needs sign-in. No current allowance is invented.
-        - `local-match`: synthetic connected accounts with a fresh matching local identity and a long full name; second account has a session quota but no weekly window, and third has no reset timestamp. The first visible badge reads `Logged In` in medium/large.
+        - `local-match`: synthetic connected accounts with a fresh matching local identity and a long full name; second account has a session quota but no weekly window, and third has no reset timestamp. The first account shows a computer icon in small and a `Logged In` badge in medium/large. Medium places the subscription beside the reset bar.
 
         Re-run the script after changing shared styles or widget content. Output images and this file are generated under the ignored `build/visuals/` directory.
         """

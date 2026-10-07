@@ -68,14 +68,26 @@ struct CodexUsageViewerWidgetContent: View {
     private func compactAccount(_ account: AccountSnapshot, index: Int) -> some View {
         let state = account.weeklyUsage(at: referenceDate)
         let reset = state.window.flatMap { WeeklyResetProgress(window: $0, at: referenceDate) }
+        let isLoggedIn = snapshot.isLocalAccount(account, at: referenceDate)
+        let plan = account.plan?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let subscription = plan.flatMap { $0.isEmpty ? nil : $0.capitalized } ?? "Unknown plan"
+        let resetDescription = reset.map { "Reset in \($0.countdown), out of seven days" } ?? "Reset time not reported"
         return VStack(alignment: .leading, spacing: isSmall ? 4 : 5) {
             HStack(spacing: isSmall ? 4 : 6) {
-                accountDot(index, size: isSmall ? 4 : 5)
+                if isSmall && isLoggedIn {
+                    Image(systemName: "desktopcomputer")
+                        .font(.system(size: 8, weight: .medium))
+                        .foregroundStyle(accent(index))
+                        .widgetAccentable()
+                        .accessibilityLabel("Logged In")
+                } else {
+                    accountDot(index, size: isSmall ? 4 : 5)
+                }
                 Text(account.displayName)
                     .font(.system(size: isSmall ? 10 : 11, weight: .semibold))
                     .lineLimit(1)
                     .truncationMode(.tail)
-                if !isSmall, snapshot.isLocalAccount(account, at: referenceDate) {
+                if !isSmall && isLoggedIn {
                     loggedInBadge
                 }
                 Spacer(minLength: 2)
@@ -93,9 +105,10 @@ struct CodexUsageViewerWidgetContent: View {
             if let window = state.window {
                 HStack(spacing: isSmall ? 6 : 9) {
                     if !isSmall {
-                        Text("Reset in")
+                        Text(subscription)
                             .font(.system(size: 8, weight: .medium))
                             .foregroundStyle(.secondary)
+                            .fixedSize()
                     }
                     resetTrack(reset, color: accent(index), height: isSmall ? 3 : 4)
                     HStack(spacing: 2) {
@@ -112,7 +125,7 @@ struct CodexUsageViewerWidgetContent: View {
                     .fixedSize()
                 }
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel(reset.map { "Reset in \($0.countdown), out of seven days" } ?? "Reset time not reported")
+                .accessibilityLabel(isSmall ? resetDescription : "\(subscription) subscription. \(resetDescription)")
                 .accessibilityValue("\(window.remainingPercent) percent weekly usage remaining")
             } else {
                 Text(state.status ?? "Usage unknown")

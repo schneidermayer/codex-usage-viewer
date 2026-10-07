@@ -14,6 +14,7 @@ Codex Usage Viewer is a native macOS 27 app with a Liquid Glass interface and de
 - A **Logged In** badge identifies the account currently used by local Codex.
 - Remaining usage and window labels taken from Codex’s account data.
 - Small, medium, and large widgets showing all three accounts, weekly usage remaining, and a seven-day reset bar with a numeric countdown.
+- Medium widgets show each account's subscription beside the reset bar. Small widgets mark the local Codex account with a computer icon.
 - Subscription type remains visible alongside the **Logged In** badge.
 - No menu bar tray icon. The main window and standard application Quit command show the build version.
 - Clear disconnected, unavailable, and out-of-date states. A reset time passing never proves that an allowance has recovered.
@@ -56,7 +57,7 @@ Download the signed, notarized app from [GitHub Releases](https://github.com/sch
 
 ## Versions and releases
 
-`VERSION` contains the current release number. Every Xcode build, including builds from the IDE, calculates `<current version>-<commits since the nearest reachable numeric release tag>`. Release **1.0** is tagged `1.0` and displays **1.0-0**; the next commit displays **1.0-1**. The app and widget embed the same version metadata. Apple bundle fields remain numeric.
+`VERSION` contains the current release number. Every Xcode build, including builds from the IDE, uses the bare version at its matching release tag, and `<current version>-<commits since the nearest reachable numeric release tag>` for subsequent development builds. Release **1.0** is tagged `1.0` and displays **1.0**; the next commit displays **1.0-1**. The app and widget embed the same version metadata. Apple bundle fields remain numeric.
 
 To publish a release, update `VERSION` and its notes, validate the UI, and commit the changes. Then run:
 

@@ -35,7 +35,7 @@ class VersionTests(unittest.TestCase):
 
     def test_release_and_following_commits(self):
         self.git('tag', '-a', '1.0', '-m', 'Release 1.0')
-        self.assertEqual(version.version_info(self.root)['display'], '1.0-0')
+        self.assertEqual(version.version_info(self.root)['display'], '1.0')
         self.commit()
         self.commit()
         self.assertEqual(version.version_info(self.root)['display'], '1.0-2')
@@ -43,7 +43,7 @@ class VersionTests(unittest.TestCase):
         self.commit()
         self.assertEqual(version.version_info(self.root)['display'], '1.1-3')
         self.git('tag', '-a', '1.1', '-m', 'Release 1.1')
-        self.assertEqual(version.version_info(self.root)['display'], '1.1-0')
+        self.assertEqual(version.version_info(self.root)['display'], '1.1')
 
     def test_unrelated_and_non_release_tags_do_not_reset_count(self):
         self.git('tag', '1.0')
@@ -71,8 +71,13 @@ class VersionTests(unittest.TestCase):
         with (bundle / 'Contents/Info.plist').open('rb') as handle:
             plist = plistlib.load(handle)
         self.assertEqual(plist['CFBundleShortVersionString'], '1.0')
-        self.assertEqual(plist['CodexUsageViewerDisplayVersion'], '1.0-0')
+        self.assertEqual(plist['CodexUsageViewerDisplayVersion'], '1.0')
         self.assertEqual(json.loads((bundle / 'Contents/Resources/BuildVersion.json').read_text()), info)
+
+    def test_version_change_at_old_tag_is_not_a_release(self):
+        self.git('tag', '1.0')
+        (self.root / 'VERSION').write_text('1.1\n')
+        self.assertEqual(version.version_info(self.root)['display'], '1.1-0')
 
 
 if __name__ == '__main__':
