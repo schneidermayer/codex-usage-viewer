@@ -4,7 +4,7 @@ Your Codex accounts, a glance away.
 
 ![Codex Usage Viewer in dark appearance, with explicitly labeled sample accounts](docs/images/dashboard-dark.png)
 
-Private repository: [`schneidermayer/codex-usage-viewer`](https://github.com/schneidermayer/codex-usage-viewer).
+Repository: [`schneidermayer/codex-usage-viewer`](https://github.com/schneidermayer/codex-usage-viewer).
 
 Codex Usage Viewer is a native macOS 27 app with a Liquid Glass interface, a menu bar companion, and desktop widgets. It brings three independently signed-in ChatGPT accounts into one view, showing Codex usage remaining, quota windows, and reset times with quiet mint, lilac, and apricot accents.
 
