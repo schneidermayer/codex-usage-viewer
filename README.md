@@ -57,13 +57,13 @@ Download the signed, notarized app from [GitHub Releases](https://github.com/sch
 
 ## Versions and releases
 
-`VERSION` contains the current release number. Every Xcode build, including builds from the IDE, uses the bare version at its matching release tag, and `<current version>-<commits since the nearest reachable numeric release tag>` for subsequent development builds. Release **1.0** is tagged `1.0` and displays **1.0**; the next commit displays **1.0-1**. The app and widget embed the same version metadata. Apple bundle fields remain numeric.
+`VERSION` contains the current release number. Every Xcode build, including builds from the IDE, uses the bare version at its matching release tag, and `<current version>-<commits since the nearest reachable numeric release tag>` for subsequent development builds. Release **1.1** is tagged `1.1` and displays **1.1**; the next commit displays **1.1-1**. The app and widget embed the same version metadata. Apple bundle fields remain numeric.
 
 To publish a release, update `VERSION` and its notes, validate the UI, and commit the changes. Then run:
 
 ```sh
 NOTARY_PROFILE=your-notarytool-keychain-profile \
-  python3 scripts/release.py 1.0 --notes docs/releases/1.0.md
+  python3 scripts/release.py 1.1 --notes docs/releases/1.1.md
 ```
 
 The release script creates the annotated numeric Git tag before building, runs Swift and versioning tests, builds for Apple silicon and Intel, signs/notarizes/staples the app, checks Gatekeeper, and publishes a ZIP plus SHA-256 checksum to GitHub Releases. A failed notarization stops publication. Published tags are never moved to a different commit.
