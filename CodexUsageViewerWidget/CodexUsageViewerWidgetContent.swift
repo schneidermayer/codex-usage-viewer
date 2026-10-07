@@ -22,7 +22,6 @@ struct CodexUsageViewerWidgetContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: isLarge ? 14 : 9) {
-            header
             if isLarge {
                 ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
                     if index > 0 { Divider().opacity(0.5) }
@@ -46,56 +45,29 @@ struct CodexUsageViewerWidgetContent: View {
             }
         }
         .fontDesign(.rounded)
-    }
-
-    private var header: some View {
-        HStack(spacing: 5) {
-            CodexUsageViewerMark(size: isSmall ? 16 : 19)
-                .widgetAccentable()
-            Text(isSmall ? "Weekly" : "Weekly usage")
-                .font(.system(size: isSmall ? 12 : 14, weight: .semibold))
-            Spacer(minLength: 0)
-            if !isSmall {
-                Text("CODEX")
-                    .font(.system(size: 8, weight: .medium))
-                    .tracking(1.4)
-                    .foregroundStyle(.secondary)
-            }
-        }
+        .accessibilityElement(children: .contain)
         .accessibilityLabel("Codex weekly usage and time until reset")
     }
 
     private func compactAccount(_ account: AccountSnapshot, index: Int) -> some View {
         let state = account.weeklyUsage(at: referenceDate)
         let reset = state.window.flatMap { WeeklyResetProgress(window: $0, at: referenceDate) }
-        let isLoggedIn = snapshot.isLocalAccount(account, at: referenceDate)
-        let plan = account.plan?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let subscription = plan.flatMap { $0.isEmpty ? nil : $0.capitalized } ?? "Unknown plan"
+        let subscription = account.subscriptionDisplayName ?? "Unknown plan"
         let resetDescription = reset.map { "Reset in \($0.countdown), out of seven days" } ?? "Reset time not reported"
-        return VStack(alignment: .leading, spacing: isSmall ? 4 : 5) {
+        return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: isSmall ? 4 : 6) {
-                if isSmall && isLoggedIn {
-                    Image(systemName: "desktopcomputer")
-                        .font(.system(size: 8, weight: .medium))
-                        .foregroundStyle(accent(index))
-                        .widgetAccentable()
-                        .accessibilityLabel("Logged In")
-                } else {
-                    accountDot(index, size: isSmall ? 4 : 5)
-                }
+                accountIndicator(account, index: index)
                 Text(account.displayName)
-                    .font(.system(size: isSmall ? 10 : 11, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .lineLimit(1)
                     .truncationMode(.tail)
-                if !isSmall && isLoggedIn {
-                    loggedInBadge
-                }
                 Spacer(minLength: 2)
                 if let window = state.window {
-                    Text("\(window.remainingPercent)% left")
-                        .font(.system(size: isSmall ? 10 : 12, weight: .semibold))
+                    Text("\(window.remainingPercent)%")
+                        .font(.system(size: isSmall ? 11 : 12, weight: .semibold))
                         .monospacedDigit()
                         .fixedSize()
+                        .accessibilityLabel("\(window.remainingPercent) percent weekly usage remaining")
                 } else {
                     Text("—")
                         .font(.system(size: 11, weight: .medium))
@@ -103,14 +75,15 @@ struct CodexUsageViewerWidgetContent: View {
                 }
             }
             if let window = state.window {
-                HStack(spacing: isSmall ? 6 : 9) {
-                    if !isSmall {
-                        Text(subscription)
-                            .font(.system(size: 8, weight: .medium))
-                            .foregroundStyle(.secondary)
-                            .fixedSize()
-                    }
+                HStack(spacing: isSmall ? 5 : 9) {
+                    Text(subscription)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .layoutPriority(1)
                     resetTrack(reset, color: accent(index), height: isSmall ? 3 : 4)
+                        .frame(minWidth: isSmall ? 30 : 50)
                     HStack(spacing: 2) {
                         if isSmall {
                             Image(systemName: "clock")
@@ -125,7 +98,7 @@ struct CodexUsageViewerWidgetContent: View {
                     .fixedSize()
                 }
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel(isSmall ? resetDescription : "\(subscription) subscription. \(resetDescription)")
+                .accessibilityLabel("\(subscription) subscription. \(resetDescription)")
                 .accessibilityValue("\(window.remainingPercent) percent weekly usage remaining")
             } else {
                 Text(state.status ?? "Usage unknown")
@@ -133,7 +106,7 @@ struct CodexUsageViewerWidgetContent: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
-                    .padding(.leading, isSmall ? 8 : 11)
+                    .padding(.leading, isSmall ? 14 : 18)
             }
         }
         .frame(maxHeight: .infinity)
@@ -145,25 +118,26 @@ struct CodexUsageViewerWidgetContent: View {
         let reset = state.window.flatMap { WeeklyResetProgress(window: $0, at: referenceDate) }
         return VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 7) {
-                accountDot(index, size: 6)
+                accountIndicator(account, index: index)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(account.displayName)
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(1)
-                    if snapshot.isLocalAccount(account, at: referenceDate) { loggedInBadge }
+                    if let subscription = account.subscriptionDisplayName {
+                        Text(subscription)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .accessibilityLabel("Subscription plan: \(subscription)")
+                    }
                 }
                 Spacer(minLength: 4)
                 if let window = state.window {
-                    HStack(alignment: .firstTextBaseline, spacing: 3) {
-                        Text("\(window.remainingPercent)%")
-                            .font(.system(size: 27, weight: .light))
-                            .monospacedDigit()
-                        Text("left")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.secondary)
-                    }
-                    .fixedSize()
-                    .accessibilityLabel("\(window.remainingPercent) percent weekly usage remaining")
+                    Text("\(window.remainingPercent)%")
+                        .font(.system(size: 27, weight: .light))
+                        .monospacedDigit()
+                        .fixedSize()
+                        .accessibilityLabel("\(window.remainingPercent) percent weekly usage remaining")
                 } else {
                     Text("—")
                         .font(.system(size: 27, weight: .light))
@@ -230,21 +204,22 @@ struct CodexUsageViewerWidgetContent: View {
         .accessibilityHidden(true)
     }
 
-    private func accountDot(_ index: Int, size: CGFloat) -> some View {
-        Circle().fill(accent(index)).frame(width: size, height: size)
-            .widgetAccentable()
-            .accessibilityHidden(true)
-    }
-
-    private var loggedInBadge: some View {
-        Label("Logged In", systemImage: "desktopcomputer")
-            .font(.system(size: 7, weight: .medium))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 2)
-            .background(.primary.opacity(0.055), in: Capsule())
-            .fixedSize()
-            .accessibilityLabel("Logged In to local Codex")
+    private func accountIndicator(_ account: AccountSnapshot, index: Int) -> some View {
+        Group {
+            if snapshot.isLocalAccount(account, at: referenceDate) {
+                Image(systemName: "desktopcomputer")
+                    .font(.system(size: isSmall ? 9 : (isLarge ? 12 : 10), weight: .medium))
+                    .foregroundStyle(accent(index))
+                    .widgetAccentable()
+                    .accessibilityLabel("Logged In")
+            } else {
+                Circle().fill(accent(index))
+                    .frame(width: isSmall ? 4 : (isLarge ? 6 : 5), height: isSmall ? 4 : (isLarge ? 6 : 5))
+                    .widgetAccentable()
+                    .accessibilityHidden(true)
+            }
+        }
+        .frame(width: isSmall ? 10 : (isLarge ? 14 : 12))
     }
 
     private func accent(_ index: Int) -> Color {

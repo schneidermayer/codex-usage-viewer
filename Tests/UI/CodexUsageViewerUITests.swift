@@ -79,7 +79,9 @@ final class CodexUsageViewerUITests: XCTestCase {
         let badge = app.descendants(matching: .any).matching(identifier: "codexusageviewer.loggedIn.account-1").firstMatch
         XCTAssertTrue(plan.waitForExistence(timeout: 3))
         XCTAssertTrue(badge.waitForExistence(timeout: 3))
-        XCTAssertTrue(visibleText(plan).contains("Pro"))
+        XCTAssertEqual(plan.label, "Subscription plan: 200")
+        let fallbackPlan = app.descendants(matching: .any).matching(identifier: "codexusageviewer.plan.account-2").firstMatch
+        XCTAssertEqual(fallbackPlan.label, "Subscription plan: plus")
         XCTAssertEqual(badge.label, "Logged In")
         XCTAssertTrue(plan.isHittable)
         XCTAssertTrue(badge.isHittable)

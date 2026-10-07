@@ -79,7 +79,9 @@ struct RenderWidgets {
         - `connected`: three synthetic accounts reporting 58%, 21%, and 77% weekly usage remaining, with 3d12h, 18h30m, and 6d2h until reset. The third account reports weekly usage in its primary slot.
         - `empty`: three unconnected accounts; no usage values are invented.
         - `attention`: the first account is stale, the second has an elapsed weekly reset, and the third needs sign-in. No current allowance is invented.
-        - `local-match`: synthetic connected accounts with a fresh matching local identity and a long full name; second account has a session quota but no weekly window, and third has no reset timestamp. The first account shows a computer icon in small and a `Logged In` badge in medium/large. Medium places the subscription beside the reset bar.
+        - `local-match`: synthetic connected accounts with a fresh matching local identity and a long full name; second account has a session quota but no weekly window, and third has no reset timestamp. The first account shows a computer icon in every size. Small and medium place the subscription before the reset bar.
+        - `subscription-tiers`: Prolite, Pro, and Promax display as 100, 200, and 500. The middle account matches the local login.
+        - `subscription-fallbacks`: unrecognized subscription names and a missing plan exercise narrow layouts without inventing numeric tiers.
 
         Re-run the script after changing shared styles or widget content. Output images and this file are generated under the ignored `build/visuals/` directory.
         """
@@ -108,11 +110,23 @@ struct RenderWidgets {
         localMatch.accounts[0].fullName = "Alexandra Weiss-Sommerfeld"
         localMatch.accounts[1].buckets[0].secondary = nil
         localMatch.accounts[2].buckets[0].primary?.resetsAt = nil
+        var tiers = connected
+        for index in tiers.accounts.indices {
+            tiers.accounts[index].plan = ["prolite", "pro", "promax"][index]
+        }
+        tiers.localCodexEmail = tiers.accounts[1].email
+        tiers.localCodexCheckedAt = now
+        var fallbacks = connected
+        fallbacks.accounts[0].plan = "Enterprise Research"
+        fallbacks.accounts[1].plan = "plus"
+        fallbacks.accounts[2].plan = nil
         return [
             ("connected", connected),
             ("empty", UsageSnapshot(accounts: AccountSnapshot.emptyAccounts, savedAt: now)),
             ("attention", attention),
-            ("local-match", localMatch)
+            ("local-match", localMatch),
+            ("subscription-tiers", tiers),
+            ("subscription-fallbacks", fallbacks)
         ]
     }
 

@@ -9,6 +9,7 @@ Native macOS 27 SwiftUI app and WidgetKit extension for three Codex accounts.
 - No inference requests are needed to read limits. Use the documented Codex app-server account methods.
 - Verify with Swift tests, a native Xcode build, and UI interaction/visual checks. State any live-account or widget-host checks that could not run.
 - Display full account names, with email fallback. Read name claims only from app-owned logins and bind them to the official account email; never log tokens or read the normal Codex login for names.
-- Widgets show only weekly usage and time until reset, with a seven-day time bar and numeric countdown. Medium widgets show the subscription beside the bar; small widgets replace the locally logged-in account's dot with a computer icon. Keep subscription type visible beside the Logged In badge in the app.
+- Widgets show only weekly usage and time until reset, with a seven-day time bar and numeric countdown. Omit the header and visible "left" wording. Small and medium widgets show the subscription before the bar; every widget size replaces the locally logged-in account's dot with a computer icon. Keep subscription type visible beside the Logged In badge in the app.
+- Display Prolite as 100, Pro as 200, and Promax as 500 in the app and widgets. Preserve other reported subscription names and never guess a missing plan.
 - Do not add a menu bar tray icon.
 - Release builds show the bare VERSION (for example 1.0). Development builds append the number of commits since the nearest reachable numeric release tag (for example 1.0-1). Releases create annotated numeric tags before building, so release 1.0 displays 1.0. Use scripts/release.py; never move a published release tag.

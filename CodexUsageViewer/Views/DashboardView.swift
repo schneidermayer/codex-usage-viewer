@@ -310,14 +310,14 @@ private struct AccountCard: View {
 
     private var accountBadges: some View {
         HStack(spacing: 7) {
-            if account.isConnected, let plan = account.plan {
-                Text(plan.capitalized)
+            if account.isConnected, let plan = account.subscriptionDisplayName {
+                Text(plan)
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(accent)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(accent.opacity(0.09), in: Capsule())
-                    .accessibilityLabel("Subscription plan: \(plan.capitalized)")
+                    .accessibilityLabel("Subscription plan: \(plan)")
                     .accessibilityIdentifier("codexusageviewer.plan.\(account.id)")
             }
             if isLocalAccount() {

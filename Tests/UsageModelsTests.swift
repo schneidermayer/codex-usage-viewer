@@ -2,6 +2,23 @@ import XCTest
 @testable import CodexUsageViewerCore
 
 final class UsageModelsTests: XCTestCase {
+    func testSubscriptionDisplayLabelsPreserveReportedPlansAndUnknownNames() {
+        for (reported, displayed) in [("prolite", "100"), ("PRO", "200"), (" ProMax\n", "500"),
+                                      ("Enterprise Research", "Enterprise Research"), ("plus", "plus"),
+                                      ("pro_future", "pro_future")] {
+            let account = AccountSnapshot(id: "account-1", name: "Account", plan: reported)
+            XCTAssertEqual(account.subscriptionDisplayName, displayed)
+            XCTAssertEqual(account.plan, reported)
+        }
+    }
+
+    func testMissingSubscriptionDoesNotInventATier() {
+        for reported: String? in [nil, "", " \n\t"] {
+            let account = AccountSnapshot(id: "account-1", name: "Account", plan: reported)
+            XCTAssertNil(account.subscriptionDisplayName)
+        }
+    }
+
     func testDynamicWindowsAndRemainingUsage() throws {
         let window = try JSONDecoder().decode(QuotaWindow.self, from: Data(#"{"usedPercent":26,"windowDurationMins":300,"resetsAt":1900000000}"#.utf8))
         XCTAssertEqual(window.remainingPercent, 74)

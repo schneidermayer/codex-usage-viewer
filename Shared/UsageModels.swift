@@ -101,6 +101,17 @@ struct AccountSnapshot: Codable, Equatable, Identifiable, Sendable {
         return "Account"
     }
 
+    /// Compact tier labels for display only; keep the reported plan unchanged.
+    var subscriptionDisplayName: String? {
+        guard let plan = plan?.trimmingCharacters(in: .whitespacesAndNewlines), !plan.isEmpty else { return nil }
+        switch plan.lowercased() {
+        case "prolite": return "100"
+        case "pro": return "200"
+        case "promax": return "500"
+        default: return plan
+        }
+    }
+
     var primaryBucket: UsageBucket? { buckets.first(where: { $0.id == "codex" }) ?? buckets.first }
     var isConnected: Bool { state == .connected }
     func isStale(at date: Date = .now) -> Bool {

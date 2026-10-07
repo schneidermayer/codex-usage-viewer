@@ -14,7 +14,8 @@ Codex Usage Viewer is a native macOS 27 app with a Liquid Glass interface and de
 - A **Logged In** badge identifies the account currently used by local Codex.
 - Remaining usage and window labels taken from Codex’s account data.
 - Small, medium, and large widgets showing all three accounts, weekly usage remaining, and a seven-day reset bar with a numeric countdown.
-- Medium widgets show each account's subscription beside the reset bar. Small widgets mark the local Codex account with a computer icon.
+- Small and medium widgets show each account's subscription before the reset bar. Every widget size marks the local Codex account with a computer icon, with no header or redundant "left" wording.
+- Compact subscription labels: Prolite → 100, Pro → 200, and Promax → 500. Other reported plan names are preserved.
 - Subscription type remains visible alongside the **Logged In** badge.
 - No menu bar tray icon. The main window and standard application Quit command show the build version.
 - Clear disconnected, unavailable, and out-of-date states. A reset time passing never proves that an allowance has recovered.
@@ -140,9 +141,9 @@ Connecting accounts requires interactive Chrome sign-in. Local identity and full
 ## Validation
 
 - Native macOS 27 Release app and embedded WidgetKit extension build and pass strict code-signature verification.
-- 68 Swift tests cover account full names, weekly reset calculations, executable discovery, incomplete npm installations, protocol framing, errors/timeouts, isolated credentials, Chrome profiles, login/cancel/disconnect races, snapshot privacy, missing/expired limits, and local-account badge changes.
+- 70 Swift tests cover subscription labels and fallback names, account full names, weekly reset calculations, executable discovery, incomplete npm installations, protocol framing, errors/timeouts, isolated credentials, Chrome profiles, login/cancel/disconnect races, snapshot privacy, missing/expired limits, and local-account badge changes.
 - Native pointer/keyboard checks cover full names, simultaneous plan and Logged In badges, settings, preview mode, all-limits details, and the versioned Quit command.
-- 24 documented widget fixture renders cover small/medium/large, light/dark, disconnected/connected/stale, and the **Logged In** badge.
+- 36 documented widget fixture renders cover small/medium/large, light/dark, disconnected/connected/stale, numeric and fallback subscription labels, and the **Logged In** computer icon.
 - The extension registers with PlugInKit and appears in Apple’s native WidgetKit Simulator chooser. Provider rendering inside that host and desktop refresh scheduling have not been verified.
 
 ## References
