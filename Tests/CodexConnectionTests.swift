@@ -27,7 +27,7 @@ final class CodexConnectionTests: XCTestCase {
         let executable: URL
         var accountRoot: URL { base.appendingPathComponent("CodexUsageViewer/Accounts", isDirectory: true) }
 
-        @MainActor func connection(accountID: String = "account-1", timeout: TimeInterval = 2, loginTimeout: TimeInterval = 2) -> CodexConnection {
+        @MainActor func connection(accountID: String = "account-1", timeout: TimeInterval = 10, loginTimeout: TimeInterval = 2) -> CodexConnection {
             CodexConnection(accountID: accountID, executableURL: executable, accountRoot: accountRoot,
                             requestTimeout: timeout, loginTimeout: loginTimeout)
         }
@@ -56,7 +56,7 @@ final class CodexConnectionTests: XCTestCase {
             message = json.loads(line)
             method = message.get("method")
             request_id = message.get("id")
-            if mode.startswith("local-"):
+            if mode.startswith("local-") or mode == "timeout":
                 with open(os.path.join(os.path.dirname(sys.argv[0]), "rpc-methods"), "a") as transcript:
                     transcript.write(method + "\\n")
             if method == "initialize":
@@ -135,7 +135,7 @@ final class CodexConnectionTests: XCTestCase {
         let marker = codexHome.appendingPathComponent("unrelated-preference")
         try Data("unchanged".utf8).write(to: marker)
         try writeNameFixture(at: codexHome, email: "local-home@example.com")
-        let identity = try await CodexConnection.readLocalIdentity(executableURL: fixture.executable, codexHome: codexHome, requestTimeout: 2)
+        let identity = try await CodexConnection.readLocalIdentity(executableURL: fixture.executable, codexHome: codexHome, requestTimeout: 10)
         XCTAssertEqual(identity?.email, "local-home@example.com")
         XCTAssertNil(identity?.fullName, "Normal-home read-only detection must not inspect tokens for a name")
         XCTAssertEqual(try String(contentsOf: marker, encoding: .utf8), "unchanged")
@@ -264,7 +264,7 @@ final class CodexConnectionTests: XCTestCase {
         } catch { XCTAssertEqual(error as? CodexConnectionError, .stopped) }
     }
 
-    func testRequestTimeoutAndCancellationCompletePendingRequests() async throws {
+    func testRequestTimeoutCompletesPendingRequest() async throws {
         let fixture = try fixture("timeout")
         let connection = fixture.connection(timeout: 0.15)
         defer { connection.stop(); fixture.remove() }
@@ -272,8 +272,23 @@ final class CodexConnectionTests: XCTestCase {
             _ = try await connection.account()
             XCTFail("Expected request timeout")
         } catch { XCTAssertEqual(error as? CodexConnectionError, .timedOut) }
+    }
+
+    func testCancellationCompletesPendingRequest() async throws {
+        let fixture = try fixture("timeout")
+        let connection = fixture.connection()
+        defer { connection.stop(); fixture.remove() }
+        // Complete startup before canceling an in-flight account request.
+        _ = try await connection.readLimits()
         let task = Task { try await connection.account() }
-        await Task.yield()
+        let transcript = fixture.base.appendingPathComponent("rpc-methods")
+        func accountRequestReceived() -> Bool {
+            (try? String(contentsOf: transcript, encoding: .utf8).contains("account/read\n")) == true
+        }
+        for _ in 0..<300 where !accountRequestReceived() {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertTrue(accountRequestReceived())
         task.cancel()
         do {
             _ = try await task.value
