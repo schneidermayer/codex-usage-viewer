@@ -1,0 +1,13 @@
+.DS_Store
+.build/
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.swiftpm/
+auth.json
+.env*
+*.log
+*.xcresult/
+*.dmg
+*.zip
