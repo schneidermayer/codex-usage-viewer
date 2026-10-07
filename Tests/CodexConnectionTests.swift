@@ -110,6 +110,23 @@ final class CodexConnectionTests: XCTestCase {
         XCTAssertNil(limits.rateLimits.secondary)
     }
 
+    private func writeNameFixture(at directory: URL, email: String) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let payload = try JSONSerialization.data(withJSONObject: ["email": email, "name": "Alex Morgan"]).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+        let data = try JSONSerialization.data(withJSONObject: ["tokens": ["id_token": "fixture.\(payload).fixture"]])
+        try data.write(to: directory.appendingPathComponent("auth.json"))
+    }
+
+    func testManagedAccountReadsMatchingProfileName() async throws {
+        let fixture = try fixture("normal")
+        let connection = fixture.connection()
+        defer { connection.stop(); fixture.remove() }
+        try writeNameFixture(at: fixture.accountRoot.appendingPathComponent("account-1"), email: "account-1@example.com")
+        let identity = try await connection.account()
+        XCTAssertEqual(identity?.fullName, "Alex Morgan")
+    }
+
     func testLocalIdentityOnlyReadsAccountWithoutChangingHomeOrAuthStorage() async throws {
         let fixture = try fixture("local-readonly")
         defer { fixture.remove() }
@@ -117,12 +134,14 @@ final class CodexConnectionTests: XCTestCase {
         try FileManager.default.createDirectory(at: codexHome, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o755])
         let marker = codexHome.appendingPathComponent("unrelated-preference")
         try Data("unchanged".utf8).write(to: marker)
+        try writeNameFixture(at: codexHome, email: "local-home@example.com")
         let identity = try await CodexConnection.readLocalIdentity(executableURL: fixture.executable, codexHome: codexHome, requestTimeout: 2)
         XCTAssertEqual(identity?.email, "local-home@example.com")
+        XCTAssertNil(identity?.fullName, "Normal-home read-only detection must not inspect tokens for a name")
         XCTAssertEqual(try String(contentsOf: marker, encoding: .utf8), "unchanged")
         let attributes = try FileManager.default.attributesOfItem(atPath: codexHome.path)
         XCTAssertEqual((attributes[.posixPermissions] as? NSNumber)?.intValue, 0o755)
-        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: codexHome.path), ["unrelated-preference"])
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: codexHome.path).sorted(), ["auth.json", "unrelated-preference"])
         let transcript = try String(contentsOf: fixture.base.appendingPathComponent("rpc-methods"), encoding: .utf8)
         XCTAssertEqual(transcript, "initialize\ninitialized\naccount/read\n")
     }

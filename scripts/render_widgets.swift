@@ -13,7 +13,7 @@ struct RenderWidgets {
         let app = NSApplication.shared
         app.setActivationPolicy(.prohibited)
 
-        let now = Date.now
+        let now = Date(timeIntervalSince1970: floor(Date.now.timeIntervalSince1970))
         let fixtures = fixtureSnapshots(now: now)
         let families: [(String, WidgetFamily, NSSize)] = [
             ("small", .systemSmall, NSSize(width: 170, height: 170)),
@@ -76,10 +76,10 @@ struct RenderWidgets {
 
         Fixtures:
 
-        - `connected`: three synthetic accounts reporting 72%, 36%, and 88% remaining in their primary windows.
+        - `connected`: three synthetic accounts reporting 58%, 21%, and 77% weekly usage remaining, with 3d12h, 18h30m, and 6d2h until reset. The third account reports weekly usage in its primary slot.
         - `empty`: three unconnected accounts; no usage values are invented.
-        - `attention`: the first account is stale, the second has an elapsed primary reset, and the third needs sign-in.
-        - `local-match`: synthetic connected accounts with a fresh synthetic local identity matching Personal; its visible badge reads `Logged In`.
+        - `attention`: the first account is stale, the second has an elapsed weekly reset, and the third needs sign-in. No current allowance is invented.
+        - `local-match`: synthetic connected accounts with a fresh matching local identity and a long full name; second account has a session quota but no weekly window, and third has no reset timestamp. The first visible badge reads `Logged In` in medium/large.
 
         Re-run the script after changing shared styles or widget content. Output images and this file are generated under the ignored `build/visuals/` directory.
         """
@@ -92,14 +92,22 @@ struct RenderWidgets {
         connected.savedAt = now
         for index in connected.accounts.indices {
             connected.accounts[index].updatedAt = now
+            connected.accounts[index].buckets[0].secondary?.resetsAt = Int(now.timeIntervalSince1970) + [302_400, 66_600, 525_600][index]
         }
+        // Weekly can be primary: the widget must never assume secondary.
+        let weekly = connected.accounts[2].buckets[0].secondary
+        connected.accounts[2].buckets[0].secondary = connected.accounts[2].buckets[0].primary
+        connected.accounts[2].buckets[0].primary = weekly
         var attention = connected
         attention.accounts[0].updatedAt = now.addingTimeInterval(-CodexUsageViewerConstants.staleInterval - 60)
-        attention.accounts[1].buckets[0].primary?.resetsAt = Int(now.timeIntervalSince1970) - 30
+        attention.accounts[1].buckets[0].secondary?.resetsAt = Int(now.timeIntervalSince1970) - 30
         attention.accounts[2].state = .needsSignIn
         var localMatch = connected
         localMatch.localCodexEmail = localMatch.accounts[0].email
         localMatch.localCodexCheckedAt = now
+        localMatch.accounts[0].fullName = "Alexandra Weiss-Sommerfeld"
+        localMatch.accounts[1].buckets[0].secondary = nil
+        localMatch.accounts[2].buckets[0].primary?.resetsAt = nil
         return [
             ("connected", connected),
             ("empty", UsageSnapshot(accounts: AccountSnapshot.emptyAccounts, savedAt: now)),

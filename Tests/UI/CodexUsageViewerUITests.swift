@@ -2,11 +2,16 @@ import XCTest
 
 @MainActor
 final class CodexUsageViewerUITests: XCTestCase {
-    private func launch() -> XCUIApplication {
+    private func visibleText(_ element: XCUIElement) -> String {
+        // Native AXStaticText exposes its displayed string as value on macOS.
+        if let value = element.value as? String, !value.isEmpty { return value }
+        return element.label
+    }
+    private func launch(connected: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["--ui-testing"]
+        app.launchArguments = ["--ui-testing"] + (connected ? ["--ui-testing-connected"] : [])
         app.launch()
-        XCTAssertTrue(app.staticTexts["A little more headspace."].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["codexusageviewer.title"].waitForExistence(timeout: 10))
         return app
     }
 
@@ -22,7 +27,7 @@ final class CodexUsageViewerUITests: XCTestCase {
         app.buttons["codexusageviewer.preview"].click()
         let previewBanner = app.descendants(matching: .any).matching(identifier: "codexusageviewer.preview.banner").firstMatch
         XCTAssertTrue(previewBanner.waitForExistence(timeout: 3))
-        for name in ["Personal", "Studio", "Projects"] {
+        for name in ["Alex Morgan", "Sam Rivera", "Jordan Lee"] {
             XCTAssertTrue(app.staticTexts[name].exists)
         }
         XCTAssertTrue(previewBanner.label.contains("sample accounts and usage figures"))
@@ -62,28 +67,47 @@ final class CodexUsageViewerUITests: XCTestCase {
         XCTAssertFalse(field.waitForExistence(timeout: 1))
     }
 
-    func testRenameThroughNativeMenuAndKeyboard() {
-        let app = launch()
+    func testFullAccountIdentityPlanAndLoggedInBadge() {
+        let app = launch(connected: true)
         defer { app.terminate() }
 
-        openRename(in: app, account: "account-1")
-        let nameField = app.textFields["codexusageviewer.rename.name"]
-        XCTAssertTrue(nameField.waitForExistence(timeout: 3))
-        nameField.click()
-        nameField.typeKey("a", modifierFlags: .command)
-        nameField.typeText("My studio")
-        nameField.typeKey(.return, modifierFlags: [])
-        XCTAssertTrue(app.staticTexts["My studio"].waitForExistence(timeout: 3))
-        XCTAssertFalse(nameField.exists)
+        for (index, name) in ["Alex Morgan", "Sam Rivera", "Jordan Lee"].enumerated() {
+            let title = app.staticTexts["codexusageviewer.name.account-\(index + 1)"]
+            XCTAssertEqual(visibleText(title), name)
+        }
+        let plan = app.descendants(matching: .any).matching(identifier: "codexusageviewer.plan.account-1").firstMatch
+        let badge = app.descendants(matching: .any).matching(identifier: "codexusageviewer.loggedIn.account-1").firstMatch
+        XCTAssertTrue(plan.waitForExistence(timeout: 3))
+        XCTAssertTrue(badge.waitForExistence(timeout: 3))
+        XCTAssertTrue(visibleText(plan).contains("Pro"))
+        XCTAssertEqual(badge.label, "Logged In")
+        XCTAssertTrue(plan.isHittable)
+        XCTAssertTrue(badge.isHittable)
 
-        openRename(in: app, account: "account-1")
-        XCTAssertTrue(nameField.waitForExistence(timeout: 3))
-        nameField.click()
-        nameField.typeKey("a", modifierFlags: .command)
-        nameField.typeText("Discard me")
-        nameField.typeKey(.escape, modifierFlags: [])
-        XCTAssertTrue(app.staticTexts["My studio"].waitForExistence(timeout: 3))
-        XCTAssertFalse(app.staticTexts["Discard me"].exists)
+        let options = app.descendants(matching: .any).matching(identifier: "codexusageviewer.options.account-1").firstMatch
+        options.click()
+        XCTAssertTrue(app.menuItems["All usage limits"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.menuItems["Rename account"].exists)
+        app.typeKey(.escape, modifierFlags: [])
+    }
+
+    func testVersionInDashboardAndStandardQuitMenu() {
+        let app = launch()
+        defer { app.terminate() }
+        let version = app.staticTexts["codexusageviewer.version"]
+        let versionText = visibleText(version)
+        XCTAssertTrue(versionText.hasPrefix("Version 1.0-"))
+        for text in ["CODEX USAGE, IN ONE PLACE", "A little more headspace.", "Three accounts. A clear view of what’s left.", "YOUR ACCOUNTS"] {
+            XCTAssertFalse(app.staticTexts[text].exists)
+        }
+        let appMenu = app.menuBars.menuBarItems["Codex Usage Viewer"]
+        XCTAssertTrue(appMenu.exists)
+        appMenu.click()
+        let displayedVersion = String(versionText.dropFirst("Version ".count))
+        let quit = app.menuItems["Quit Codex Usage Viewer \(displayedVersion)"]
+        XCTAssertTrue(quit.waitForExistence(timeout: 3))
+        quit.click()
+        XCTAssertTrue(app.wait(for: .notRunning, timeout: 3))
     }
 
     func testAllUsageLimitsInPreviewWithPointerAndEscape() {
@@ -96,7 +120,8 @@ final class CodexUsageViewerUITests: XCTestCase {
         options.click()
         let allLimits = app.menuItems["All usage limits"]
         XCTAssertTrue(allLimits.waitForExistence(timeout: 3))
-        XCTAssertFalse(app.menuItems["Rename account"].isEnabled)
+        XCTAssertFalse(app.menuItems["Rename account"].exists)
+        XCTAssertFalse(app.menuItems["Reconnect"].isEnabled)
         allLimits.click()
 
         let title = app.staticTexts["codexusageviewer.limits.title"]
@@ -117,12 +142,4 @@ final class CodexUsageViewerUITests: XCTestCase {
         XCTAssertFalse(title.exists)
     }
 
-    private func openRename(in app: XCUIApplication, account: String) {
-        let options = app.descendants(matching: .any).matching(identifier: "codexusageviewer.options.\(account)").firstMatch
-        XCTAssertTrue(options.waitForExistence(timeout: 3))
-        options.click()
-        let rename = app.menuItems["Rename account"]
-        XCTAssertTrue(rename.waitForExistence(timeout: 3))
-        rename.click()
-    }
 }

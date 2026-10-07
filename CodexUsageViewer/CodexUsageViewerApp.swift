@@ -11,21 +11,25 @@ struct CodexUsageViewerApp: App {
             DashboardHost(store: store)
                 .onAppear { appDelegate.store = store }
         }
-        .defaultSize(width: 1040, height: 800)
+        .defaultSize(width: 1040, height: 670)
         .windowResizability(.contentMinSize)
         .windowToolbarStyle(.unified)
         .commands {
+            CommandGroup(replacing: .appTermination) {
+                Button("Quit Codex Usage Viewer \(CodexUsageViewerVersion.display)") { NSApp.terminate(nil) }
+                    .keyboardShortcut("q")
+            }
+            CommandGroup(replacing: .appInfo) {
+                Button("About Codex Usage Viewer") {
+                    NSApp.orderFrontStandardAboutPanel(options: [.applicationVersion: CodexUsageViewerVersion.display])
+                }
+            }
             CommandGroup(after: .newItem) {
                 Button("Refresh Usage") { Task { await store.refresh() } }
                     .keyboardShortcut("r")
                     .disabled(store.isRefreshing || store.isDemo)
             }
         }
-
-        MenuBarExtra("Codex Usage Viewer", systemImage: "circle.hexagongrid") {
-            MenuBarHost(store: store)
-        }
-        .menuBarExtraStyle(.window)
 
         Settings {
             CodexUsageViewerSettingsView(store: store)
@@ -41,15 +45,6 @@ private struct DashboardHost: View {
             .frame(minWidth: 900, minHeight: 620)
             .onAppear { store.openDashboardAction = { openWindow(id: "dashboard") } }
             .onOpenURL { _ in store.openDashboard() }
-    }
-}
-
-private struct MenuBarHost: View {
-    @ObservedObject var store: CodexUsageViewerStore
-    @Environment(\.openWindow) private var openWindow
-    var body: some View {
-        MenuBarView(store: store)
-            .onAppear { store.openDashboardAction = { openWindow(id: "dashboard") } }
     }
 }
 

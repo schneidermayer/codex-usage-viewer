@@ -19,29 +19,8 @@ struct CodexUsageViewerUsageProvider: TimelineProvider {
         let now = Date.now
         let snapshot = SharedSnapshotStore.load()
         let nextReload = now.addingTimeInterval(15 * 60)
-        var dates = [now, nextReload]
-        if let checkedAt = snapshot.localCodexCheckedAt {
-            let expiresAt = checkedAt.addingTimeInterval(CodexUsageViewerConstants.staleInterval + 1)
-            if expiresAt > now && expiresAt < nextReload { dates.append(expiresAt) }
-        }
-
-        // These entries only change how the cached snapshot is presented. A reset
-        // passing never establishes a new allowance without another server fetch.
-        for account in snapshot.accounts {
-            if let updatedAt = account.updatedAt {
-                let staleAt = updatedAt.addingTimeInterval(CodexUsageViewerConstants.staleInterval + 1)
-                if staleAt > now && staleAt < nextReload { dates.append(staleAt) }
-            }
-            for bucket in account.buckets {
-                for window in [bucket.primary, bucket.secondary].compactMap({ $0 }) {
-                    if let resetAt = window.resetDate, resetAt > now && resetAt < nextReload {
-                        dates.append(resetAt)
-                    }
-                }
-            }
-        }
-
-        let entries = Set(dates).sorted().map { CodexUsageViewerUsageEntry(date: $0, snapshot: snapshot) }
+        let entries = WeeklyWidgetTimeline.dates(snapshot: snapshot, now: now, reloadAt: nextReload)
+            .map { CodexUsageViewerUsageEntry(date: $0, snapshot: snapshot) }
         completion(Timeline(entries: entries, policy: .after(nextReload)))
     }
 }
@@ -55,7 +34,7 @@ struct CodexUsageViewerUsageWidget: Widget {
                 .widgetURL(URL(string: "codexusageviewer://dashboard"))
         }
         .configurationDisplayName("Codex Usage Viewer")
-        .description("Your three Codex accounts, at a glance.")
+        .description("Weekly usage and time until reset for your three Codex accounts.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }

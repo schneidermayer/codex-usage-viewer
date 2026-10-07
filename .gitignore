@@ -11,3 +11,6 @@ auth.json
 *.xcresult/
 *.dmg
 *.zip
+
+dist/
+__pycache__/

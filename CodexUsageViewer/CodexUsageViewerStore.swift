@@ -154,6 +154,13 @@ final class CodexUsageViewerStore: ObservableObject {
             isDemo = true
             accounts = UsageSnapshot.preview.accounts
         }
+        if isUITesting && arguments.contains("--ui-testing-connected") {
+            accounts = UsageSnapshot.preview.accounts
+            liveAccounts = accounts
+            isDemo = false
+            localCodexEmail = accounts.first?.email
+            localCodexCheckedAt = dependencies.now()
+        }
         updateLocalCodexMatchStatus()
         if startsPolling && !isUITesting {
             pollTask = Task { [weak self] in
@@ -178,7 +185,7 @@ final class CodexUsageViewerStore: ObservableObject {
     }
 
     func refresh() async {
-        guard !isDemo, !isRefreshing else { return }
+        guard !isDemo, !isUITesting, !isRefreshing else { return }
         availableCodex = dependencies.locateExecutable(codexPath) != nil
         isRefreshing = true
         defer { isRefreshing = false }
@@ -236,7 +243,7 @@ final class CodexUsageViewerStore: ObservableObject {
             return
         }
         if let account = accounts.first(where: { isLocalAccount($0) }) {
-            localCodexStatus = "Local Codex is using \(account.name)."
+            localCodexStatus = "Local Codex is using \(account.displayName)."
         } else {
             localCodexStatus = "Local Codex uses an account that isn’t connected here."
         }
@@ -261,6 +268,7 @@ final class CodexUsageViewerStore: ObservableObject {
             }
             accounts[index].email = identity.email
             accounts[index].plan = identity.planType
+            accounts[index].fullName = identity.fullName
             accounts[index].state = .connected
             let limits = try await worker.readLimits()
             accounts[index].buckets = limits.buckets
@@ -273,13 +281,13 @@ final class CodexUsageViewerStore: ObservableObject {
     }
 
     func connect(_ accountID: String) async {
-        guard !isDemo, login == nil, loginTask == nil, !busyAccountIDs.contains(accountID), !pendingDisconnectIDs.contains(accountID), let account = accounts.first(where: { $0.id == accountID }) else { return }
+        guard !isDemo, !isUITesting, login == nil, loginTask == nil, !busyAccountIDs.contains(accountID), !pendingDisconnectIDs.contains(accountID), let account = accounts.first(where: { $0.id == accountID }) else { return }
         chromeProfiles = dependencies.discoverChromeProfiles()
         profileSelections = profileSelections.filter { _, profileID in chromeProfiles.contains(where: { $0.id == profileID }) }
         preferences.set(profileSelections, forKey: "chromeProfiles")
         let attempt = UUID()
         loginAttemptID = attempt
-        login = PendingLogin(id: accountID, accountName: account.name, isWaiting: true)
+        login = PendingLogin(id: accountID, accountName: account.displayName, isWaiting: true)
         loginTask = Task { [weak self] in
             guard let self else { return }
             defer { if loginAttemptID == attempt { loginTask = nil } }
@@ -344,7 +352,7 @@ final class CodexUsageViewerStore: ObservableObject {
     }
 
     func disconnect(_ accountID: String) async {
-        guard !isDemo, let index = accounts.firstIndex(where: { $0.id == accountID }), !pendingDisconnectIDs.contains(accountID) else { return }
+        guard !isDemo, !isUITesting, let index = accounts.firstIndex(where: { $0.id == accountID }), !pendingDisconnectIDs.contains(accountID) else { return }
         pendingDisconnectIDs.insert(accountID)
         var ownsBusyState = false
         defer {
@@ -367,15 +375,6 @@ final class CodexUsageViewerStore: ObservableObject {
             updateLocalCodexMatchStatus()
             persist()
         } catch { errorMessage = "Couldn’t disconnect: \(error.localizedDescription)" }
-    }
-
-    func rename(_ accountID: String, to name: String) {
-        guard !isDemo, let index = accounts.firstIndex(where: { $0.id == accountID }) else { return }
-        let clean = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
-        guard !clean.isEmpty else { return }
-        accounts[index].name = clean
-        updateLocalCodexMatchStatus()
-        persist()
     }
 
     func setDemo(_ enabled: Bool) {

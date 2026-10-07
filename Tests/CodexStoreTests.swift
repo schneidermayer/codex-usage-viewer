@@ -265,13 +265,14 @@ final class CodexStoreTests: XCTestCase {
         await harness.store.refresh()
         await harness.store.connect("account-1")
         await harness.store.disconnect("account-1")
-        harness.store.rename("account-1", to: "Changed fixture")
         XCTAssertTrue(harness.saved.isEmpty)
         XCTAssertEqual(harness.worker.accountCalls, 0)
         XCTAssertEqual(harness.widgetReloads, 0)
         harness.store.setDemo(false)
         XCTAssertEqual(harness.store.accounts, harness.cached.accounts)
-        harness.store.rename("account-1", to: "Renamed live account")
+        harness.worker.identity = CodexIdentity(email: "old@fixture.test", planType: "plus", type: "chatgpt")
+        harness.worker.limitsHandler = { throw StoreFixtureError.offline }
+        await harness.store.refresh()
         XCTAssertEqual(harness.saved.count, 1)
         XCTAssertEqual(harness.saved[0].accounts[0].email, "old@fixture.test")
         XCTAssertEqual(harness.saved[0].accounts[0].updatedAt, harness.cached.accounts[0].updatedAt)
@@ -388,5 +389,36 @@ final class CodexStoreTests: XCTestCase {
         await refresh.value
         XCTAssertNil(harness.store.localCodexEmail)
         XCTAssertNil(harness.store.localCodexCheckedAt)
+    }
+
+    func testVerifiedIdentityFullNameIsPublishedAndClearedWhenItChanges() async {
+        let harness = Harness()
+        defer { harness.finish() }
+        harness.worker.identity = CodexIdentity(email: "current@fixture.test", planType: "pro", type: "chatgpt", fullName: "Alex Morgan")
+        await harness.store.refresh()
+        XCTAssertEqual(harness.store.accounts[0].fullName, "Alex Morgan")
+        XCTAssertEqual(harness.store.accounts[0].displayName, "Alex Morgan")
+        XCTAssertEqual(harness.saved.last?.accounts[0].fullName, "Alex Morgan")
+        harness.worker.identity = CodexIdentity(email: "different@fixture.test", planType: "plus", type: "chatgpt")
+        harness.worker.limitsHandler = { throw StoreFixtureError.offline }
+        await harness.store.refresh()
+        XCTAssertNil(harness.store.accounts[0].fullName)
+        XCTAssertEqual(harness.store.accounts[0].displayName, "different@fixture.test")
+    }
+
+    func testConnectedUITestFixtureHasNamesPlanAndLocalBadgeWithoutNetwork() async {
+        let harness = Harness(arguments: ["--ui-testing", "--ui-testing-connected"])
+        defer { harness.finish() }
+        XCTAssertFalse(harness.store.isDemo)
+        XCTAssertEqual(harness.store.accounts[0].displayName, "Alex Morgan")
+        XCTAssertEqual(harness.store.accounts[0].plan, "pro")
+        XCTAssertTrue(harness.store.isLocalAccount(harness.store.accounts[0]))
+        await harness.store.refresh()
+        await harness.store.connect("account-1")
+        await harness.store.disconnect("account-1")
+        XCTAssertEqual(harness.worker.accountCalls, 0)
+        XCTAssertEqual(harness.localReadCalls, 0)
+        XCTAssertEqual(harness.worker.beginCalls, 0)
+        XCTAssertTrue(harness.saved.isEmpty)
     }
 }

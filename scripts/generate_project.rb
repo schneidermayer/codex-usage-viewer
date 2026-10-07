@@ -15,10 +15,10 @@ project.build_configurations.each do |config|
     'CODE_SIGN_STYLE' => 'Manual',
     'CODE_SIGN_IDENTITY' => ENV.fetch('CUV_SIGNING_IDENTITY', 'Developer ID Application'),
     'ENABLE_HARDENED_RUNTIME' => 'YES',
-    'MARKETING_VERSION' => '0.1.0',
+    'MARKETING_VERSION' => File.read('VERSION').strip,
     'CURRENT_PROJECT_VERSION' => '1',
     'GENERATE_INFOPLIST_FILE' => 'NO',
-    'ENABLE_USER_SCRIPT_SANDBOXING' => 'YES',
+    'ENABLE_USER_SCRIPT_SANDBOXING' => 'NO',
     'SWIFT_EMIT_LOC_STRINGS' => 'YES'
   })
 end
@@ -40,6 +40,11 @@ if Dir.exist?('CodexUsageViewer/Assets.xcassets')
   app.resources_build_phase.add_file_reference(groups['CodexUsageViewer'].new_file('Assets.xcassets'))
 end
 [app, widget].each do |target|
+  version_phase = target.new_shell_script_build_phase('Derive version from Git')
+  version_phase.shell_script = 'python3 "${SRCROOT}/scripts/version.py" --write-bundle "${TARGET_BUILD_DIR}/${WRAPPER_NAME}"'
+  version_phase.input_paths = ['$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)']
+  version_phase.output_paths = ['$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/BuildVersion.json']
+  version_phase.always_out_of_date = '1'
   target.build_configurations.each do |config|
     config.build_settings.merge!({
       'PRODUCT_BUNDLE_IDENTIFIER' => target == app ? 'com.inndevs.codexusageviewer' : 'com.inndevs.codexusageviewer.widget',
@@ -64,6 +69,9 @@ app.add_dependency(widget)
 embed = app.new_copy_files_build_phase('Embed App Extensions')
 embed.dst_subfolder_spec = '13'
 embed.add_file_reference(widget.product_reference).settings = { 'ATTRIBUTES' => ['RemoveHeadersOnCopy'] }
+version_phase = app.shell_script_build_phases.find { |phase| phase.name == 'Derive version from Git' }
+app.build_phases.delete(version_phase)
+app.build_phases << version_phase
 
 if Dir.exist?('Tests/UI')
   ui = project.new_target(:ui_test_bundle, 'CodexUsageViewerUITests', :osx, '27.0')

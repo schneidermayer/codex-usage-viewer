@@ -1,8 +1,7 @@
 import SwiftUI
 import WidgetKit
 
-/// Reads only the sanitized shared snapshot. Also reusable by the app's visual
-/// verification harness without constructing a WidgetKit extension.
+/// Sanitized snapshot presentation, shared by the extension and visual harness.
 struct CodexUsageViewerWidgetContent: View {
     let snapshot: UsageSnapshot
     var family: WidgetFamily?
@@ -18,232 +17,71 @@ struct CodexUsageViewerWidgetContent: View {
                 ?? AccountSnapshot(id: id, name: "Account \(index + 1)")
         }
     }
-    private var connectedCount: Int { accounts.filter(\.isConnected).count }
-    private var currentCount: Int {
-        accounts.filter { account in
-            account.isConnected && !account.isStale(at: referenceDate) && account.issue == nil
-                && [account.primaryBucket?.primary, account.primaryBucket?.secondary]
-                    .compactMap { $0 }
-                    .contains { $0.usedPercent.isFinite && !$0.hasElapsed(at: referenceDate) }
-        }.count
-    }
+    private var isSmall: Bool { effectiveFamily == .systemSmall }
+    private var isLarge: Bool { effectiveFamily == .systemLarge }
 
     var body: some View {
-        Group {
-            if effectiveFamily == .systemSmall {
-                smallContent
-            } else if effectiveFamily == .systemLarge {
-                largeContent
+        VStack(alignment: .leading, spacing: isLarge ? 14 : 9) {
+            header
+            if isLarge {
+                ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
+                    if index > 0 { Divider().opacity(0.5) }
+                    Link(destination: accountURL(account)) {
+                        largeAccount(account, index: index)
+                    }
+                    .buttonStyle(.plain)
+                    .frame(maxHeight: .infinity)
+                }
             } else {
-                mediumContent
+                ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
+                    if isSmall {
+                        compactAccount(account, index: index)
+                    } else {
+                        Link(destination: accountURL(account)) {
+                            compactAccount(account, index: index)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             }
         }
         .fontDesign(.rounded)
     }
 
     private var header: some View {
-        HStack(spacing: 6) {
-            CodexUsageViewerMark(size: 20)
+        HStack(spacing: 5) {
+            CodexUsageViewerMark(size: isSmall ? 16 : 19)
                 .widgetAccentable()
-            Text(effectiveFamily == .systemSmall ? "Codex Usage" : "Codex Usage Viewer")
-                .font(.system(size: 14, weight: .semibold))
-            Spacer(minLength: 4)
-            if effectiveFamily != .systemSmall {
-                Text("Codex usage")
-                    .font(.system(size: 10, weight: .medium))
+            Text(isSmall ? "Weekly" : "Weekly usage")
+                .font(.system(size: isSmall ? 12 : 14, weight: .semibold))
+            Spacer(minLength: 0)
+            if !isSmall {
+                Text("CODEX")
+                    .font(.system(size: 8, weight: .medium))
+                    .tracking(1.4)
                     .foregroundStyle(.secondary)
             }
         }
+        .accessibilityLabel("Codex weekly usage and time until reset")
     }
 
-    private var smallContent: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            header
-            Spacer(minLength: 8)
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text("\(connectedCount)")
-                    .font(.system(size: 43, weight: .light, design: .rounded))
-                    .monospacedDigit()
-                Text("/ 3")
-                    .font(.system(size: 19, weight: .regular, design: .rounded))
-                    .foregroundStyle(.secondary)
-            }
-            Text("accounts connected")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 10)
-            HStack(spacing: 5) {
-                ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
-                    Capsule()
-                        .fill(account.isConnected ? accent(index) : Color.secondary.opacity(0.18))
-                        .frame(height: 4)
-                        .widgetAccentable()
-                }
-            }
-            Text(smallStatus)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .padding(.top, 7)
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    private var smallStatus: String {
-        if connectedCount == 0 {
-            return accounts.contains(where: { $0.state == .needsSignIn }) ? "Sign in again in app" : "Connect in app"
-        }
-        if currentCount == connectedCount { return "\(currentCount) with recent usage" }
-        return "\(currentCount) current · open for details"
-    }
-
-    private var mediumContent: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            header
-            ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
-                Link(destination: accountURL(account)) {
-                    compactRow(account, index: index)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    private func compactRow(_ account: AccountSnapshot, index: Int) -> some View {
-        HStack(spacing: 9) {
-            Circle()
-                .fill(accent(index))
-                .frame(width: 6, height: 6)
-                .widgetAccentable()
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(account.name)
-                    .font(.system(size: 12, weight: .semibold))
+    private func compactAccount(_ account: AccountSnapshot, index: Int) -> some View {
+        let state = account.weeklyUsage(at: referenceDate)
+        let reset = state.window.flatMap { WeeklyResetProgress(window: $0, at: referenceDate) }
+        return VStack(alignment: .leading, spacing: isSmall ? 4 : 5) {
+            HStack(spacing: isSmall ? 4 : 6) {
+                accountDot(index, size: isSmall ? 4 : 5)
+                Text(account.displayName)
+                    .font(.system(size: isSmall ? 10 : 11, weight: .semibold))
                     .lineLimit(1)
-                if snapshot.isLocalAccount(account, at: referenceDate) {
+                    .truncationMode(.tail)
+                if !isSmall, snapshot.isLocalAccount(account, at: referenceDate) {
                     loggedInBadge
                 }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            if let status = unavailableStatus(account) {
-                Text(status)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                    .frame(width: 148, alignment: .trailing)
-            } else {
-                compactWindow(account.primaryBucket?.primary)
-                compactWindow(account.primaryBucket?.secondary)
-            }
-        }
-        .frame(maxHeight: .infinity)
-        .accessibilityElement(children: .combine)
-    }
-
-    private func compactWindow(_ window: QuotaWindow?) -> some View {
-        VStack(alignment: .trailing, spacing: 1) {
-            Text(window?.label ?? "Not reported")
-                .font(.system(size: 8, weight: .medium))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-            if let window, isCurrent(window) {
-                Text("\(window.remainingPercent)% left")
-                    .font(.system(size: 12, weight: .semibold))
-                    .monospacedDigit()
-            } else {
-                Text(window?.hasElapsed(at: referenceDate) == true ? "Refresh needed" : "—")
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel(window?.hasElapsed(at: referenceDate) == true ? "Reset passed; usage unknown until refreshed" : "Usage not reported")
-            }
-        }
-        .frame(width: 70, alignment: .trailing)
-    }
-
-    private var largeContent: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            header
-            ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
-                if index > 0 { Divider().opacity(0.65) }
-                Link(destination: accountURL(account)) {
-                    detailedRow(account, index: index)
-                }
-                .buttonStyle(.plain)
-                .frame(maxHeight: .infinity)
-            }
-        }
-    }
-
-    private func detailedRow(_ account: AccountSnapshot, index: Int) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(spacing: 7) {
-                Circle()
-                    .fill(accent(index))
-                    .frame(width: 7, height: 7)
-                    .widgetAccentable()
-                    .accessibilityHidden(true)
-                Text(account.name)
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(1)
-                if snapshot.isLocalAccount(account, at: referenceDate) {
-                    loggedInBadge
-                }
-                Spacer(minLength: 4)
-                if let plan = account.plan, account.isConnected {
-                    Text(plan.capitalized)
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            if let status = unavailableStatus(account) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(status)
-                            .font(.system(size: 12, weight: .medium))
-                        if account.isConnected, let updatedAt = account.updatedAt {
-                            HStack(spacing: 3) {
-                                Text("Last fetched")
-                                Text(updatedAt, style: .relative)
-                                Text("ago")
-                            }
-                            .font(.system(size: 9))
-                        }
-                    }
-                    Spacer()
-                    Image(systemName: account.state == .needsSignIn ? "person.crop.circle.badge.exclamationmark" : "arrow.up.right")
-                        .font(.system(size: 12))
-                }
-                .foregroundStyle(.secondary)
-            } else {
-                HStack(alignment: .top, spacing: 15) {
-                    detailedWindow(account.primaryBucket?.primary, color: accent(index))
-                    detailedWindow(account.primaryBucket?.secondary, color: accent(index))
-                }
-                if account.buckets.count > 1 {
-                    Text("\(account.buckets.count - 1) more \(account.buckets.count == 2 ? "limit" : "limits") in app")
-                        .font(.system(size: 8))
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func detailedWindow(_ window: QuotaWindow?, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(window?.label ?? "Not reported")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                Spacer(minLength: 0)
-                if let window, isCurrent(window) {
+                Spacer(minLength: 2)
+                if let window = state.window {
                     Text("\(window.remainingPercent)% left")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: isSmall ? 10 : 12, weight: .semibold))
                         .monospacedDigit()
                         .fixedSize()
                 } else {
@@ -252,73 +90,152 @@ struct CodexUsageViewerWidgetContent: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            GeometryReader { geometry in
-                Capsule().fill(Color.secondary.opacity(0.13))
-                if let window, isCurrent(window) {
-                    Capsule()
-                        .fill(color)
-                        .frame(width: geometry.size.width * Double(window.remainingPercent) / 100)
-                        .widgetAccentable()
+            if let window = state.window {
+                HStack(spacing: isSmall ? 6 : 9) {
+                    if !isSmall {
+                        Text("Reset in")
+                            .font(.system(size: 8, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+                    resetTrack(reset, color: accent(index), height: isSmall ? 3 : 4)
+                    HStack(spacing: 2) {
+                        if isSmall {
+                            Image(systemName: "clock")
+                                .font(.system(size: 7))
+                                .accessibilityHidden(true)
+                        }
+                        Text(reset?.countdown ?? "Unknown")
+                            .font(.system(size: isSmall ? 8 : 10, weight: .medium))
+                            .monospacedDigit()
+                    }
+                    .foregroundStyle(.secondary)
+                    .fixedSize()
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(reset.map { "Reset in \($0.countdown), out of seven days" } ?? "Reset time not reported")
+                .accessibilityValue("\(window.remainingPercent) percent weekly usage remaining")
+            } else {
+                Text(state.status ?? "Usage unknown")
+                    .font(.system(size: isSmall ? 8 : 10))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .padding(.leading, isSmall ? 8 : 11)
+            }
+        }
+        .frame(maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func largeAccount(_ account: AccountSnapshot, index: Int) -> some View {
+        let state = account.weeklyUsage(at: referenceDate)
+        let reset = state.window.flatMap { WeeklyResetProgress(window: $0, at: referenceDate) }
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 7) {
+                accountDot(index, size: 6)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(account.displayName)
+                        .font(.system(size: 13, weight: .semibold))
+                        .lineLimit(1)
+                    if snapshot.isLocalAccount(account, at: referenceDate) { loggedInBadge }
+                }
+                Spacer(minLength: 4)
+                if let window = state.window {
+                    HStack(alignment: .firstTextBaseline, spacing: 3) {
+                        Text("\(window.remainingPercent)%")
+                            .font(.system(size: 27, weight: .light))
+                            .monospacedDigit()
+                        Text("left")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+                    .fixedSize()
+                    .accessibilityLabel("\(window.remainingPercent) percent weekly usage remaining")
+                } else {
+                    Text("—")
+                        .font(.system(size: 27, weight: .light))
+                        .foregroundStyle(.tertiary)
                 }
             }
-            .frame(height: 4)
-            .accessibilityHidden(true)
-            resetCaption(window)
-                .font(.system(size: 8))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+            if state.window != nil {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(reset == nil ? "Reset time not reported" : "Time until reset")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 4)
+                    Text(reset?.countdown ?? "—")
+                        .font(.system(size: 13, weight: .semibold))
+                        .monospacedDigit()
+                }
+                VStack(spacing: 4) {
+                    resetTrack(reset, color: accent(index), height: 5)
+                    HStack {
+                        Text("0")
+                        Spacer()
+                        Text("7 days")
+                    }
+                    .font(.system(size: 8))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+                }
+                .accessibilityLabel(reset.map { "\(Int(($0.fractionRemaining * 100).rounded())) percent of seven days until reset" } ?? "Reset time unknown")
+            } else {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(state.status ?? "Usage unknown")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    if account.isConnected, let updatedAt = account.updatedAt, state != .notReported {
+                        Text(CodexUsageViewerFormatting.updated(updatedAt, now: referenceDate))
+                            .font(.system(size: 9))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
     }
 
-    @ViewBuilder
-    private func resetCaption(_ window: QuotaWindow?) -> some View {
-        if let window, window.hasElapsed(at: referenceDate) {
-            Text("Reset passed · refresh needed")
-        } else if let window, isCurrent(window), let resetDate = window.resetDate {
-            HStack(spacing: 3) {
-                Text("Resets in")
-                Text(resetDate, style: .relative)
+    /// Seven quiet day segments. Their fill encodes time, not token usage.
+    private func resetTrack(_ progress: WeeklyResetProgress?, color: Color, height: CGFloat) -> some View {
+        HStack(spacing: isSmall ? 2 : 3) {
+            ForEach(0..<7) { day in
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.primary.opacity(0.075))
+                        if let progress {
+                            Capsule()
+                                .fill(color)
+                                .frame(width: geometry.size.width * min(1, max(0, progress.fractionRemaining * 7 - Double(day))))
+                                .widgetAccentable()
+                        }
+                    }
+                }
             }
-        } else {
-            Text(window == nil ? "Usage not reported" : "Reset time unavailable")
         }
+        .frame(height: height)
+        .accessibilityHidden(true)
     }
 
-    private func unavailableStatus(_ account: AccountSnapshot) -> String? {
-        switch account.state {
-        case .disconnected: return "Connect in app"
-        case .needsSignIn: return "Sign in again in app"
-        case .connected:
-            if account.issue != nil { return "Update unavailable · open app" }
-            guard account.updatedAt != nil else { return "Waiting for usage" }
-            if account.isStale(at: referenceDate) { return "Usage out of date · open app" }
-            guard let bucket = account.primaryBucket,
-                  bucket.primary != nil || bucket.secondary != nil else { return "Usage not reported" }
-            return nil
-        }
-    }
-
-    private func isCurrent(_ window: QuotaWindow) -> Bool {
-        window.usedPercent.isFinite && !window.hasElapsed(at: referenceDate)
+    private func accountDot(_ index: Int, size: CGFloat) -> some View {
+        Circle().fill(accent(index)).frame(width: size, height: size)
+            .widgetAccentable()
+            .accessibilityHidden(true)
     }
 
     private var loggedInBadge: some View {
         Label("Logged In", systemImage: "desktopcomputer")
-            .font(.system(size: 8, weight: .medium))
+            .font(.system(size: 7, weight: .medium))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 5)
             .padding(.vertical, 2)
-            .background(.primary.opacity(0.065), in: Capsule())
+            .background(.primary.opacity(0.055), in: Capsule())
             .fixedSize()
             .accessibilityLabel("Logged In to local Codex")
     }
 
     private func accent(_ index: Int) -> Color {
-        if renderingMode == .accented { return .primary }
-        return CodexUsageViewerPalette.accent(for: index)
+        renderingMode == .accented ? .primary : CodexUsageViewerPalette.accent(for: index)
     }
 
     private func accountURL(_ account: AccountSnapshot) -> URL {

@@ -4,7 +4,6 @@ import SwiftUI
 struct DashboardView: View {
     @ObservedObject var store: CodexUsageViewerStore
     @Environment(\.colorScheme) private var colorScheme
-    @State private var renaming: AccountSnapshot?
     @State private var disconnecting: AccountSnapshot?
     @State private var inspectingLimits: AccountSnapshot?
     @State private var showsSettings = false
@@ -15,7 +14,7 @@ struct DashboardView: View {
         ZStack {
             backdrop
             ScrollView {
-                VStack(alignment: .leading, spacing: 27) {
+                VStack(alignment: .leading, spacing: 24) {
                     header
                     if store.isDemo { previewBanner }
                     if let error = store.errorMessage {
@@ -24,9 +23,9 @@ struct DashboardView: View {
                     accountSection
                     footer
                 }
-                .padding(.horizontal, 36)
-                .padding(.top, 27)
-                .padding(.bottom, 25)
+                .padding(.horizontal, 32)
+                .padding(.top, 24)
+                .padding(.bottom, 24)
                 .frame(maxWidth: 1_180)
                 .frame(maxWidth: .infinity)
             }
@@ -39,15 +38,12 @@ struct DashboardView: View {
         ), onDismiss: { Task { await store.cancelLogin() } }) { _ in
             ConnectionSheet(store: store)
         }
-        .sheet(item: $renaming) { account in
-            RenameAccountSheet(account: account) { name in store.rename(account.id, to: name) }
-        }
         .sheet(item: $inspectingLimits) { account in
             AccountLimitsSheet(account: account, isDemo: store.isDemo)
         }
         .sheet(isPresented: $showsSettings) { CodexUsageViewerSettingsView(store: store) }
         .confirmationDialog(
-            "Disconnect \(disconnecting?.name ?? "account")?",
+            "Disconnect \(disconnecting?.displayName ?? "account")?",
             isPresented: Binding(get: { disconnecting != nil }, set: { if !$0 { disconnecting = nil } }),
             titleVisibility: .visible
         ) {
@@ -73,102 +69,84 @@ struct DashboardView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 23) {
-            HStack(alignment: .center) {
-                HStack(spacing: 9) {
-                    CodexUsageViewerMark(size: 30)
+        HStack(alignment: .center, spacing: 20) {
+            HStack(spacing: 12) {
+                CodexUsageViewerMark(size: 39)
+                VStack(alignment: .leading, spacing: 6) {
                     Text("Codex Usage Viewer")
-                        .font(.system(size: 19, weight: .semibold, design: .rounded))
-                        .tracking(-0.5)
-                }
-                Spacer()
-                GlassEffectContainer(spacing: 12) {
-                    HStack(spacing: 10) {
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.2)) { store.setDemo(!store.isDemo) }
-                        } label: {
-                            Label(store.isDemo ? "Exit preview" : "Preview", systemImage: store.isDemo ? "eye.slash" : "eye")
+                        .font(.system(size: 22, weight: .semibold, design: .rounded))
+                        .tracking(-0.6)
+                        .accessibilityIdentifier("codexusageviewer.title")
+                    HStack(spacing: 8) {
+                        Text("Version \(CodexUsageViewerVersion.display)")
+                            .accessibilityIdentifier("codexusageviewer.version")
+                        Circle().fill(.tertiary).frame(width: 2, height: 2)
+                        HStack(spacing: 5) {
+                            Circle()
+                                .fill(connectedCount > 0 ? CodexUsageViewerPalette.mint : Color.secondary.opacity(0.5))
+                                .frame(width: 4, height: 4)
+                            Text(store.isDemo ? "Sample accounts" : "\(connectedCount) of 3 connected")
                         }
-                        .buttonStyle(.glass)
-                        .accessibilityIdentifier("codexusageviewer.preview")
-                        .help("Explore Codex Usage Viewer with clearly labeled sample accounts")
-
-                        Button { showsSettings = true } label: {
-                            Image(systemName: "slider.horizontal.3")
-                                .frame(width: 17)
-                        }
-                        .buttonStyle(.glass)
-                        .accessibilityLabel("Codex Usage Viewer settings")
-                        .accessibilityIdentifier("codexusageviewer.settings")
-                        .help("Settings")
                     }
-                    .controlSize(.large)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
                 }
             }
-            HStack(alignment: .bottom, spacing: 16) {
-                VStack(alignment: .leading, spacing: 9) {
-                    CodexUsageViewerEyebrow(text: "CODEX USAGE, IN ONE PLACE")
-                    Text("A little more headspace.")
-                        .font(.system(size: 34, weight: .semibold))
-                        .tracking(-1.15)
-                    Text("Three accounts. A clear view of what’s left.")
-                        .font(.system(size: 14))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-                Button {
-                    Task { await store.refresh() }
-                } label: {
-                    HStack(spacing: 7) {
-                        if store.isRefreshing {
-                            ProgressView().controlSize(.small).scaleEffect(0.8)
-                        } else {
-                            Image(systemName: "arrow.clockwise")
+            Spacer(minLength: 0)
+            GlassEffectContainer(spacing: 12) {
+                HStack(spacing: 9) {
+                    Button {
+                        Task { await store.refresh() }
+                    } label: {
+                        HStack(spacing: 7) {
+                            if store.isRefreshing {
+                                ProgressView().controlSize(.small).scaleEffect(0.8)
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                            }
+                            Text(store.isRefreshing ? "Refreshing…" : "Refresh")
                         }
-                        Text(store.isRefreshing ? "Refreshing…" : "Refresh")
+                        .frame(minWidth: 82)
                     }
-                    .frame(minWidth: 84)
+                    .buttonStyle(.glass)
+                    .accessibilityIdentifier("codexusageviewer.refresh")
+                    .disabled(store.isRefreshing || store.isDemo || connectedCount == 0)
+                    .keyboardShortcut("r", modifiers: .command)
+
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) { store.setDemo(!store.isDemo) }
+                    } label: {
+                        Label(store.isDemo ? "Exit preview" : "Preview", systemImage: store.isDemo ? "eye.slash" : "eye")
+                    }
+                    .buttonStyle(.glass)
+                    .accessibilityIdentifier("codexusageviewer.preview")
+                    .help("Explore the interface with clearly labeled sample accounts")
+
+                    Button { showsSettings = true } label: {
+                        Image(systemName: "slider.horizontal.3").frame(width: 17)
+                    }
+                    .buttonStyle(.glass)
+                    .accessibilityLabel("Codex Usage Viewer settings")
+                    .accessibilityIdentifier("codexusageviewer.settings")
+                    .help("Settings")
                 }
-                .buttonStyle(.glass)
-                .accessibilityIdentifier("codexusageviewer.refresh")
                 .controlSize(.large)
-                .disabled(store.isRefreshing || store.isDemo || connectedCount == 0)
-                .keyboardShortcut("r", modifiers: .command)
-                .padding(.bottom, 3)
             }
         }
     }
 
     private var accountSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                CodexUsageViewerEyebrow(text: "YOUR ACCOUNTS")
-                Spacer()
-                HStack(spacing: 5) {
-                    Circle()
-                        .fill(connectedCount > 0 ? CodexUsageViewerPalette.mint : Color.secondary.opacity(0.5))
-                        .frame(width: 5, height: 5)
-                    Text(store.isDemo ? "Sample accounts" : "\(connectedCount) of 3 connected")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 9)
-                .padding(.vertical, 5)
-                .glassEffect(.regular, in: .capsule)
-            }
-            HStack(alignment: .top, spacing: 16) {
-                ForEach(store.accounts) { account in
-                    AccountCard(
-                        account: account,
-                        isDemo: store.isDemo,
-                        isLocalAccount: { store.isLocalAccount(account) },
-                        connect: { Task { await store.connect(account.id) } },
-                        showLimits: { inspectingLimits = account },
-                        rename: { renaming = account },
-                        disconnect: { disconnecting = account }
-                    )
-                    .frame(maxWidth: .infinity)
-                }
+        HStack(alignment: .top, spacing: 16) {
+            ForEach(store.accounts) { account in
+                AccountCard(
+                    account: account,
+                    isDemo: store.isDemo,
+                    isLocalAccount: { store.isLocalAccount(account) },
+                    connect: { Task { await store.connect(account.id) } },
+                    showLimits: { inspectingLimits = account },
+                    disconnect: { disconnecting = account }
+                )
+                .frame(maxWidth: .infinity)
             }
         }
     }
@@ -194,39 +172,29 @@ struct DashboardView: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 12) {
-        HStack(alignment: .top, spacing: 24) {
-            HStack(alignment: .top, spacing: 9) {
-                Image(systemName: connectedCount == 0 ? "person.crop.rectangle.stack" : "rectangle.inset.filled.and.person.filled")
-                    .font(.system(size: 16, weight: .light))
+            HStack(alignment: .top, spacing: 18) {
+                Label(connectedCount == 0
+                      ? "Connect each account using its matching Chrome profile."
+                      : "Add a widget: control-click your desktop → Edit Widgets → Codex Usage Viewer.",
+                      systemImage: connectedCount == 0 ? "person.crop.rectangle.stack" : "rectangle.on.rectangle")
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(connectedCount == 0 ? "A home for all three logins." : "Keep Codex Usage Viewer on your desktop.")
-                        .font(.system(size: 12, weight: .medium))
-                    Text(connectedCount == 0
-                         ? "Connect each account using its matching browser profile."
-                         : "Control-click your desktop → Edit Widgets → Codex Usage Viewer.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                }
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                Label("Stored on this Mac", systemImage: "lock.shield")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize()
+                    .help("Each account connection stays on this Mac. Widgets receive usage snapshots, never credentials.")
             }
-            Spacer(minLength: 0)
-            HStack(spacing: 5) {
-                Image(systemName: "lock.shield")
-                Text("Private by design")
+            if !store.isDemo && !store.accounts.contains(where: { store.isLocalAccount($0) }) {
+                Label(store.localCodexStatus ?? "Checking the account signed in to local Codex…", systemImage: "desktopcomputer")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("codexusageviewer.localStatus")
             }
-            .font(.system(size: 11))
-            .foregroundStyle(.tertiary)
-            .help("Codex Usage Viewer stores your account connections on this Mac. Widgets receive only the usage information they need.")
         }
-        if !store.isDemo && !store.accounts.contains(where: { store.isLocalAccount($0) }) {
-            Label(store.localCodexStatus ?? "Checking the account signed in to local Codex…", systemImage: "desktopcomputer")
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("codexusageviewer.localStatus")
-        }
-        }
-        .padding(.top, 1)
     }
 
     private func notice(_ text: String, symbol: String, color: Color) -> some View {
@@ -247,7 +215,6 @@ private struct AccountCard: View {
     var isLocalAccount: () -> Bool
     var connect: () -> Void
     var showLimits: () -> Void
-    var rename: () -> Void
     var disconnect: () -> Void
     @Environment(\.colorScheme) private var colorScheme
 
@@ -258,6 +225,8 @@ private struct AccountCard: View {
         TimelineView(.periodic(from: .now, by: 30)) { timeline in
             VStack(alignment: .leading, spacing: 0) {
                 cardHeader
+                accountBadges
+                    .padding(.top, 12)
                 if account.isConnected {
                     connectedContent(now: timeline.date)
                 } else {
@@ -265,7 +234,7 @@ private struct AccountCard: View {
                 }
             }
             .padding(20)
-            .frame(height: 353, alignment: .top)
+            .frame(height: 405, alignment: .top)
             .frame(maxWidth: .infinity)
             .background {
                 RoundedRectangle(cornerRadius: 22)
@@ -284,52 +253,80 @@ private struct AccountCard: View {
     }
 
     private var cardHeader: some View {
-        HStack(alignment: .center, spacing: 9) {
+        HStack(alignment: .top, spacing: 10) {
             Text(String(format: "%02d", index + 1))
                 .font(.system(size: 11, weight: .semibold, design: .monospaced))
                 .foregroundStyle(accent)
-                .frame(width: 32, height: 32)
-                .background(accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(account.name)
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(1)
-                Text(account.email ?? (account.state == .needsSignIn ? "Sign in again" : "Your next connection"))
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .help(account.email ?? "")
-            }
-            Spacer(minLength: 0)
-            Menu {
-                if account.isConnected {
-                    Button("All usage limits", systemImage: "chart.bar.xaxis", action: showLimits)
-                        .accessibilityIdentifier("codexusageviewer.limits.\(account.id)")
-                    Divider()
+                .frame(width: 34, height: 34)
+                .background(accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 11))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(account.displayName)
+                    .font(.system(size: 14, weight: .semibold))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .help(account.displayName)
+                    .accessibilityIdentifier("codexusageviewer.name.\(account.id)")
+                if let email = account.email, email != account.displayName {
+                    Text(email)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(email)
+                } else if !account.isConnected {
+                    Text(account.state == .needsSignIn ? "Sign in again" : "Not connected")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
                 }
-                Button("Rename account", systemImage: "pencil", action: rename)
-                    .disabled(isDemo)
-                    .accessibilityIdentifier("codexusageviewer.rename.\(account.id)")
-                if account.state != .disconnected {
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if account.state != .disconnected {
+                Menu {
+                    if account.isConnected {
+                        Button("All usage limits", systemImage: "chart.bar.xaxis", action: showLimits)
+                            .accessibilityIdentifier("codexusageviewer.limits.\(account.id)")
+                        Divider()
+                    }
                     Button("Reconnect", systemImage: "arrow.trianglehead.2.clockwise", action: connect)
                         .disabled(isDemo)
-                    Divider()
                     Button("Disconnect…", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive, action: disconnect)
                         .disabled(isDemo)
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 17, height: 23)
+                        .contentShape(Rectangle())
                 }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 13, weight: .semibold))
-                    .frame(width: 20, height: 24)
-                    .contentShape(Rectangle())
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .accessibilityLabel("Options for \(account.displayName)")
+                .accessibilityIdentifier("codexusageviewer.options.\(account.id)")
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .accessibilityLabel("Options for \(account.name)")
-            .accessibilityIdentifier("codexusageviewer.options.\(account.id)")
         }
+        .frame(height: 60, alignment: .top)
+    }
+
+    private var accountBadges: some View {
+        HStack(spacing: 7) {
+            if account.isConnected, let plan = account.plan {
+                Text(plan.capitalized)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(accent)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(accent.opacity(0.09), in: Capsule())
+                    .accessibilityLabel("Subscription plan: \(plan.capitalized)")
+                    .accessibilityIdentifier("codexusageviewer.plan.\(account.id)")
+            }
+            if isLocalAccount() {
+                LocalCodexBadge()
+                    .accessibilityIdentifier("codexusageviewer.loggedIn.\(account.id)")
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(height: 23, alignment: .leading)
     }
 
     private func connectedContent(now: Date) -> some View {
@@ -355,7 +352,7 @@ private struct AccountCard: View {
                 .padding(.top, 21)
                 .padding(.bottom, 12)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(account.name), \(primary.label), \(primary.remainingPercent) percent remaining, last reported")
+                .accessibilityLabel("\(account.displayName), \(primary.label), \(primary.remainingPercent) percent remaining, last reported")
                 .accessibilityIdentifier("codexusageviewer.usage.\(account.id)")
 
                 HStack {
@@ -399,7 +396,7 @@ private struct AccountCard: View {
                     Image(systemName: "chart.bar.xaxis")
                         .font(.system(size: 29, weight: .ultraLight))
                         .foregroundStyle(accent)
-                    Text("Waiting for a clear picture.")
+                    Text("Usage not reported")
                         .font(.system(size: 13, weight: .medium))
                     Text("This account hasn’t reported its usage limits yet.")
                         .font(.system(size: 11))
@@ -419,16 +416,7 @@ private struct AccountCard: View {
                 Text(isDemo ? "Sample data" : status(now: now))
                     .lineLimit(1)
                 Spacer(minLength: 0)
-                if isLocalAccount() {
-                    LocalCodexBadge()
-                        .accessibilityIdentifier("codexusageviewer.loggedIn.\(account.id)")
-                } else if let plan = account.plan {
-                    Text(plan.capitalized)
-                        .font(.system(size: 9, weight: .medium))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(.primary.opacity(0.035), in: Capsule())
-                }
+
             }
             .font(.system(size: 9))
             .foregroundStyle(.tertiary)
@@ -450,10 +438,10 @@ private struct AccountCard: View {
                     .foregroundStyle(accent)
             }
             .padding(.top, 26)
-            Text(account.state == .needsSignIn ? "Let’s reconnect." : "Make room for this account.")
+            Text(account.state == .needsSignIn ? "Reconnect this account" : "Connect a Codex account")
                 .font(.system(size: 12, weight: .medium))
                 .padding(.top, 16)
-            Text(account.state == .needsSignIn ? "Sign in to see current usage again." : "Your Codex limits, a glance away.")
+            Text(account.state == .needsSignIn ? "Sign in to see current usage again." : "Choose the matching Chrome profile.")
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
                 .padding(.top, 5)
@@ -465,9 +453,9 @@ private struct AccountCard: View {
             .buttonStyle(.glass)
             .controlSize(.large)
             .disabled(isDemo)
-            .accessibilityLabel("Connect \(account.name)")
+            .accessibilityLabel("Connect \(account.displayName)")
             .accessibilityIdentifier("codexusageviewer.connect.\(account.id)")
-            Text("Use browser profile \(index + 1)")
+            Text("Account slot \(index + 1) of 3")
                 .font(.system(size: 9))
                 .foregroundStyle(.tertiary)
                 .padding(.top, 10)
@@ -531,7 +519,7 @@ private struct AccountLimitsSheet: View {
                             .font(.system(size: 24, weight: .semibold))
                             .tracking(-0.65)
                             .accessibilityIdentifier("codexusageviewer.limits.title")
-                        Text(account.name)
+                        Text(account.displayName)
                             .font(.system(size: 13, weight: .medium))
                         if let email = account.email {
                             Text(email)
@@ -637,50 +625,5 @@ private struct AccountLimitsSheet: View {
         let elapsed = account.buckets.flatMap { [$0.primary, $0.secondary].compactMap { $0 } }
             .contains { $0.hasElapsed(at: now) }
         return elapsed ? "A reset time has passed. Its usage stays historical until the next successful refresh." : nil
-    }
-}
-
-private struct RenameAccountSheet: View {
-    var account: AccountSnapshot
-    var save: (String) -> Void
-    @Environment(\.dismiss) private var dismiss
-    @State private var name = ""
-    @FocusState private var nameFocused: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("A name that feels familiar.")
-                .font(.system(size: 22, weight: .semibold))
-                .tracking(-0.6)
-            Text("Give this account a name that’s easy to spot in Codex Usage Viewer and your widgets.")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-            TextField("Account name", text: $name)
-                .textFieldStyle(.roundedBorder)
-                .focused($nameFocused)
-                .accessibilityIdentifier("codexusageviewer.rename.name")
-                .onSubmit(saveAndDismiss)
-            HStack {
-                Spacer()
-                Button("Cancel") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                    .accessibilityIdentifier("codexusageviewer.rename.cancel")
-                Button("Save", action: saveAndDismiss)
-                    .buttonStyle(.glassProminent)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .accessibilityIdentifier("codexusageviewer.rename.save")
-            }
-        }
-        .padding(28)
-        .frame(width: 390)
-        .onAppear { name = account.name; nameFocused = true }
-    }
-
-    private func saveAndDismiss() {
-        let value = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { return }
-        save(String(value.prefix(40)))
-        dismiss()
     }
 }

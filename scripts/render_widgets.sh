@@ -9,6 +9,7 @@ xcrun swiftc \
   -parse-as-library \
   -target "$(uname -m)-apple-macos27.0" \
   "$PROJECT_ROOT/Shared/UsageModels.swift" \
+  "$PROJECT_ROOT/Shared/WeeklyUsage.swift" \
   "$PROJECT_ROOT/Shared/CodexUsageViewerStyle.swift" \
   "$PROJECT_ROOT/CodexUsageViewerWidget/CodexUsageViewerWidgetContent.swift" \
   "$PROJECT_ROOT/scripts/render_widgets.swift" \

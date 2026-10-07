@@ -90,6 +90,16 @@ struct AccountSnapshot: Codable, Equatable, Identifiable, Sendable {
     var buckets: [UsageBucket] = []
     var updatedAt: Date?
     var issue: String?
+    var fullName: String? = nil
+
+    // `name` remains in stored snapshots for backward compatibility only.
+    // A custom slot label must never be presented as the OpenAI account's name.
+    var displayName: String {
+        if let value = fullName?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty { return value }
+        if let value = email?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty { return value }
+        if let index = CodexUsageViewerConstants.accountIDs.firstIndex(of: id) { return "Account \(index + 1)" }
+        return "Account"
+    }
 
     var primaryBucket: UsageBucket? { buckets.first(where: { $0.id == "codex" }) ?? buckets.first }
     var isConnected: Bool { state == .connected }
@@ -124,9 +134,9 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
     static var preview: UsageSnapshot {
         let now = Date.now
         var accounts = AccountSnapshot.emptyAccounts
-        let names = ["Personal", "Studio", "Projects"]
+        let names = ["Alex Morgan", "Sam Rivera", "Jordan Lee"]
         for index in accounts.indices {
-            accounts[index].name = names[index]
+            accounts[index].fullName = names[index]
             accounts[index].email = ["personal@example.com", "studio@example.com", "projects@example.com"][index]
             accounts[index].plan = ["pro", "plus", "pro"][index]
             accounts[index].state = .connected

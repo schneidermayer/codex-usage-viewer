@@ -5,6 +5,9 @@ struct CodexIdentity: Decodable, Equatable, Sendable {
     let email: String?
     let planType: String?
     let type: String
+    var fullName: String? = nil
+
+    private enum CodingKeys: String, CodingKey { case email, planType, type }
 }
 
 struct CodexLogin: Sendable {
@@ -123,7 +126,12 @@ final class CodexConnection: CodexAccountConnection {
         struct AccountResponse: Decodable { let account: CodexIdentity? }
         try await ensureStarted()
         let response: AccountResponse = try await request("account/read", params: ["refreshToken": false])
-        return response.account
+        var identity = response.account
+        if !localIdentityOnly, identity?.type == "chatgpt", let email = identity?.email {
+            let directory = accountRoot.appendingPathComponent(accountID, isDirectory: true)
+            identity?.fullName = CodexProfileName.readFromAppOwnedAccount(directory: directory, matchingEmail: email)
+        }
+        return identity
     }
 
     func readLimits() async throws -> RateLimitsResponse {
@@ -214,7 +222,7 @@ final class CodexConnection: CodexAccountConnection {
             guard let self else { throw CodexConnectionError.stopped }
             try self.startTransport()
             let _: EmptyResponse = try await self.request("initialize", params: [
-                "clientInfo": ["name": "codexusageviewer", "title": "Codex Usage Viewer", "version": "0.1.0"],
+                "clientInfo": ["name": "codexusageviewer", "title": "Codex Usage Viewer", "version": CodexUsageViewerVersion.display],
                 "capabilities": ["experimentalApi": false]
             ])
             try Task.checkCancellation()
@@ -551,5 +559,51 @@ final class CodexConnection: CodexAccountConnection {
         guard manager.fileExists(atPath: executable.path, isDirectory: &directory), !directory.boolValue,
               manager.isExecutableFile(atPath: executable.path) else { return nil }
         return executable
+    }
+}
+
+/// Display-only metadata from this app's own managed login. This does not verify
+/// authentication: the official account/read response remains the identity source.
+/// Token bytes are never exposed, copied to snapshots, or logged.
+enum CodexProfileName {
+    static func readFromAppOwnedAccount(directory: URL, matchingEmail: String) -> String? {
+        let url = directory.appendingPathComponent("auth.json")
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+              attributes[.type] as? FileAttributeType == .typeRegular,
+              let size = attributes[.size] as? NSNumber, size.intValue <= 1_048_576,
+              let data = try? Data(contentsOf: url) else { return nil }
+        return fullName(fromAuthData: data, matchingEmail: matchingEmail)
+    }
+
+    static func fullName(fromAuthData data: Data, matchingEmail: String) -> String? {
+        struct Tokens: Decodable { let id_token: String? }
+        struct Auth: Decodable { let tokens: Tokens? }
+        struct Profile: Decodable { let email: String?; let name: String? }
+        struct Claims: Decodable {
+            let email: String?
+            let name: String?
+            let profile: Profile?
+            enum CodingKeys: String, CodingKey { case email, name; case profile = "https://api.openai.com/profile" }
+        }
+        guard data.count <= 1_048_576,
+              let auth = try? JSONDecoder().decode(Auth.self, from: data), let token = auth.tokens?.id_token else { return nil }
+        let segments = token.split(separator: ".", omittingEmptySubsequences: false)
+        guard segments.count == 3, !segments[0].isEmpty, !segments[2].isEmpty else { return nil }
+        let encoded = String(segments[1])
+        guard !encoded.isEmpty, encoded.range(of: #"\A[A-Za-z0-9_-]+\z"#, options: .regularExpression) != nil else { return nil }
+        var base64 = encoded.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        base64 += String(repeating: "=", count: (4 - base64.count % 4) % 4)
+        guard let payload = Data(base64Encoded: base64),
+              let claims = try? JSONDecoder().decode(Claims.self, from: payload) else { return nil }
+        let candidateEmail = claims.name != nil ? (claims.email ?? claims.profile?.email) : (claims.profile?.email ?? claims.email)
+        guard let claimedEmail = candidateEmail else { return nil }
+        let expected = matchingEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        let observed = claimedEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !expected.isEmpty, !observed.isEmpty, expected.caseInsensitiveCompare(observed) == .orderedSame,
+              let claimedName = claims.name ?? claims.profile?.name else { return nil }
+        let name = claimedName.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+        guard !name.isEmpty, name.count <= 160,
+              !name.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else { return nil }
+        return name
     }
 }
