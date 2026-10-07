@@ -28,6 +28,10 @@ The widget image is a fixture render of the real widget views; it does not depic
 
 See the [official Codex documentation](https://learn.chatgpt.com/docs/app-server) for the local app-server integration and [authentication options](https://learn.chatgpt.com/docs/auth).
 
+Automatic detection respects your configured executable and `PATH`, then checks common installation locations. For nvm installations, it compares the installed **Codex package versions**, independently of Node versions. Incomplete npm installations whose native executable is missing are skipped without running them.
+
+If macOS blocks a Codex executable, leave the blocked copy in the Bin and install a current copy from the [official Codex CLI instructions](https://learn.chatgpt.com/docs/codex/cli). Select that installation in Settings if needed. The viewer does not disable Gatekeeper, remove quarantine attributes, or restore blocked executables.
+
 ## Connect your accounts
 
 1. Open Codex Usage Viewer. If Codex is not detected, open **Settings** and choose the installed `codex` executable.
@@ -112,7 +116,7 @@ The three viewer accounts still require your interactive Chrome sign-ins. The ex
 ## Validation
 
 - Native macOS 27 Release app and embedded WidgetKit extension build and pass strict code-signature verification.
-- 47 Swift tests cover protocol framing, errors/timeouts, isolated credentials, Chrome profiles, login/cancel/disconnect races, snapshot privacy, missing/expired limits, and local-account badge changes.
+- 54 Swift tests cover executable discovery, incomplete npm installations, protocol framing, errors/timeouts, isolated credentials, Chrome profiles, login/cancel/disconnect races, snapshot privacy, missing/expired limits, and local-account badge changes.
 - Native pointer/keyboard checks cover account naming, settings, preview mode, and all-limits details.
 - 24 documented widget fixture renders cover small/medium/large, light/dark, disconnected/connected/stale, and the **Logged In** badge.
 - The extension registers with PlugInKit and appears in Apple’s native WidgetKit Simulator chooser. Provider rendering inside that host and desktop refresh scheduling have not been verified.

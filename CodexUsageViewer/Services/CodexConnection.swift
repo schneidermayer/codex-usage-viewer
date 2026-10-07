@@ -442,27 +442,114 @@ final class CodexConnection: CodexAccountConnection {
     }
 
     static func locateExecutable(override: String?) -> URL? {
+        locateExecutable(override: override, environment: ProcessInfo.processInfo.environment,
+                         userDirectory: FileManager.default.homeDirectoryForCurrentUser,
+                         standardPaths: ["/opt/homebrew/bin/codex", "/usr/local/bin/codex", "/Applications/Codex.app/Contents/Resources/codex"])
+    }
+
+    // Discovery only reads metadata. It never executes candidate CLIs to compare versions.
+    static func locateExecutable(override: String?, environment: [String: String], userDirectory: URL, standardPaths: [String]) -> URL? {
         let manager = FileManager.default
         func executable(_ path: String) -> URL? {
             let expanded = NSString(string: path).expandingTildeInPath
             var isDirectory: ObjCBool = false
             guard expanded.hasPrefix("/"), manager.fileExists(atPath: expanded, isDirectory: &isDirectory),
                   !isDirectory.boolValue, manager.isExecutableFile(atPath: expanded) else { return nil }
-            return URL(fileURLWithPath: expanded)
+            let url = URL(fileURLWithPath: expanded)
+            let resolved = url.resolvingSymlinksInPath()
+            if let root = managedPackageRoot(for: resolved) {
+                // An npm entrypoint can survive after macOS removes its native binary.
+                guard managedVersion(at: root) != nil, nativeExecutable(in: root) != nil else { return nil }
+            }
+            return url
         }
         if let override, !override.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return executable(override.trimmingCharacters(in: .whitespacesAndNewlines))
         }
-        let userDirectory = manager.homeDirectoryForCurrentUser
-        var candidates = (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ":")
+        var candidates = (environment["PATH"] ?? "").split(separator: ":")
             .map { String($0) + "/codex" }
-        candidates += ["/opt/homebrew/bin/codex", "/usr/local/bin/codex", "/Applications/Codex.app/Contents/Resources/codex",
-                       userDirectory.appendingPathComponent(".local/bin/codex").path,
+        candidates += standardPaths + [userDirectory.appendingPathComponent(".local/bin/codex").path,
                        userDirectory.appendingPathComponent(".npm-global/bin/codex").path]
+        if let selected = candidates.lazy.compactMap(executable).first { return selected }
         let versions = userDirectory.appendingPathComponent(".nvm/versions/node", isDirectory: true)
         let installed = (try? manager.contentsOfDirectory(at: versions, includingPropertiesForKeys: nil)) ?? []
-        candidates += installed.sorted { $0.lastPathComponent.compare($1.lastPathComponent, options: .numeric) == .orderedDescending }
-            .map { $0.appendingPathComponent("bin/codex").path }
-        return candidates.lazy.compactMap(executable).first
+        let managed = installed.compactMap { node -> (url: URL, version: String)? in
+            guard let url = executable(node.appendingPathComponent("bin/codex").path),
+                  let root = managedPackageRoot(for: url.resolvingSymlinksInPath()),
+                  let version = managedVersion(at: root) else { return nil }
+            return (url, version)
+        }
+        return managed.sorted { left, right in
+            let leftCore = left.version.split(separator: "-", maxSplits: 1).first.map(String.init) ?? left.version
+            let rightCore = right.version.split(separator: "-", maxSplits: 1).first.map(String.init) ?? right.version
+            let coreOrder = leftCore.compare(rightCore, options: .numeric)
+            if coreOrder != .orderedSame { return coreOrder == .orderedDescending }
+            // Prefer a release over a prerelease of the same version.
+            if left.version.contains("-") != right.version.contains("-") { return !left.version.contains("-") }
+            let order = left.version.compare(right.version, options: .numeric)
+            return order == .orderedSame ? left.url.path < right.url.path : order == .orderedDescending
+        }.first?.url
+    }
+
+    private static func managedPackageRoot(for executable: URL) -> URL? {
+        guard executable.lastPathComponent == "codex.js", executable.deletingLastPathComponent().lastPathComponent == "bin" else { return nil }
+        let root = executable.deletingLastPathComponent().deletingLastPathComponent()
+        guard root.lastPathComponent == "codex", root.deletingLastPathComponent().lastPathComponent == "@openai" else { return nil }
+        return root
+    }
+
+    private static func managedVersion(at root: URL) -> String? {
+        struct PackageMetadata: Decodable { let name: String; let version: String }
+        guard let data = try? Data(contentsOf: root.appendingPathComponent("package.json")),
+              let metadata = try? JSONDecoder().decode(PackageMetadata.self, from: data), metadata.name == "@openai/codex",
+              metadata.version.range(of: #"\A[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?\z"#, options: .regularExpression) != nil else { return nil }
+        return metadata.version
+    }
+
+    private static func nativeExecutable(in root: URL) -> URL? {
+        #if arch(arm64)
+        let platformPackage = "codex-darwin-arm64"
+        let target = "aarch64-apple-darwin"
+        #else
+        let platformPackage = "codex-darwin-x64"
+        let target = "x86_64-apple-darwin"
+        #endif
+        let manager = FileManager.default
+        // npm has used both embedded vendor trees and optional platform packages.
+        // Resolve the same platform package locations without evaluating JavaScript.
+        struct PackageMetadata: Decodable { let optionalDependencies: [String: String]? }
+        let metadata = (try? Data(contentsOf: root.appendingPathComponent("package.json")))
+            .flatMap { try? JSONDecoder().decode(PackageMetadata.self, from: $0) }
+        var selectedRoot = root
+        let usesPlatformPackage = metadata?.optionalDependencies?["@openai/\(platformPackage)"] != nil
+        if usesPlatformPackage {
+            let optionalRoots = [root.appendingPathComponent("node_modules/@openai/\(platformPackage)"),
+                                 root.deletingLastPathComponent().appendingPathComponent(platformPackage)]
+            if let installed = optionalRoots.first(where: { manager.fileExists(atPath: $0.appendingPathComponent("package.json").path) }) {
+                // A resolved platform package with a missing native binary is broken;
+                // the wrapper does not fall back to an older embedded binary.
+                selectedRoot = installed
+            }
+        }
+        let targetRoot = selectedRoot.appendingPathComponent("vendor/\(target)")
+        let layoutURL = targetRoot.appendingPathComponent("codex-package.json")
+        let entrypoint: String
+        if manager.fileExists(atPath: layoutURL.path) {
+            struct Layout: Decodable { let layoutVersion: Int; let target: String; let entrypoint: String }
+            guard let data = try? Data(contentsOf: layoutURL),
+                  let layout = try? JSONDecoder().decode(Layout.self, from: data),
+                  layout.layoutVersion == 1, layout.target == target, layout.entrypoint == "bin/codex" else { return nil }
+            entrypoint = layout.entrypoint
+        } else {
+            // Modern platform packages ship explicit layout metadata. Never let a
+            // leftover legacy binary satisfy a broken modern installation.
+            guard !usesPlatformPackage else { return nil }
+            entrypoint = "codex/codex"
+        }
+        let executable = targetRoot.appendingPathComponent(entrypoint)
+        var directory: ObjCBool = false
+        guard manager.fileExists(atPath: executable.path, isDirectory: &directory), !directory.boolValue,
+              manager.isExecutableFile(atPath: executable.path) else { return nil }
+        return executable
     }
 }
