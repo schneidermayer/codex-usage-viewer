@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import plistlib
 import subprocess
 from pathlib import Path
 from version import ROOT, RELEASE, git
@@ -48,6 +49,12 @@ def main():
     if info['display'] != f'{args.version}-0' or info['commit'] != git(ROOT, 'rev-parse', 'HEAD'):
         raise RuntimeError('built version does not match the release tag')
     run('codesign', '--verify', '--deep', '--strict', str(app))
+    for bundle in [app, *app.glob('Contents/PlugIns/*.appex')]:
+        details = subprocess.run(['codesign', '-dv', '--verbose=4', str(bundle)], check=True, capture_output=True, text=True).stderr
+        raw = subprocess.run(['codesign', '-d', '--entitlements', ':-', str(bundle)], check=True, capture_output=True).stdout
+        entitlements = plistlib.loads(raw)
+        if 'Timestamp=' not in details or entitlements.get('com.apple.security.get-task-allow'):
+            raise RuntimeError('release signatures require secure timestamps and must omit the debugging entitlement')
     output = ROOT / 'dist' / args.version
     output.mkdir(parents=True, exist_ok=True)
     archive = output / f'Codex-Usage-Viewer-{args.version}.zip'

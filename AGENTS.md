@@ -11,4 +11,4 @@ Native macOS 27 SwiftUI app and WidgetKit extension for three Codex accounts.
 - Display full account names, with email fallback. Read name claims only from app-owned logins and bind them to the official account email; never log tokens or read the normal Codex login for names.
 - Widgets show only weekly usage and time until reset, with a seven-day time bar and numeric countdown. Keep subscription type visible beside the Logged In badge in the app.
 - Do not add a menu bar tray icon.
-- Visible versions use VERSION plus the number of commits since the nearest reachable numeric release tag. Releases create annotated numeric tags before building, so release 1.0 displays 1.0-0. Use scripts/release.py; never move an existing release tag.
+- Visible versions use VERSION plus the number of commits since the nearest reachable numeric release tag. Releases create annotated numeric tags before building, so release 1.0 displays 1.0-0. Use scripts/release.py; never move a published release tag.

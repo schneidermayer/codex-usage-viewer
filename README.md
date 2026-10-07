@@ -65,7 +65,7 @@ NOTARY_PROFILE=your-notarytool-keychain-profile \
   python3 scripts/release.py 1.0 --notes docs/releases/1.0.md
 ```
 
-The release script creates the annotated numeric Git tag before building, runs Swift and versioning tests, builds for Apple silicon and Intel, signs/notarizes/staples the app, checks Gatekeeper, and publishes a ZIP plus SHA-256 checksum to GitHub Releases. A failed notarization stops publication. Existing tags are never moved to a different commit.
+The release script creates the annotated numeric Git tag before building, runs Swift and versioning tests, builds for Apple silicon and Intel, signs/notarizes/staples the app, checks Gatekeeper, and publishes a ZIP plus SHA-256 checksum to GitHub Releases. A failed notarization stops publication. Published tags are never moved to a different commit.
 
 ## Build and test
 

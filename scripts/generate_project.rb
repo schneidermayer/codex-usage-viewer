@@ -21,6 +21,10 @@ project.build_configurations.each do |config|
     'ENABLE_USER_SCRIPT_SANDBOXING' => 'NO',
     'SWIFT_EMIT_LOC_STRINGS' => 'YES'
   })
+  if config.name == 'Release'
+    config.build_settings['CODE_SIGN_INJECT_BASE_ENTITLEMENTS'] = 'NO'
+    config.build_settings['OTHER_CODE_SIGN_FLAGS'] = '--timestamp'
+  end
 end
 app = project.new_target(:application, 'CodexUsageViewer', :osx, '27.0')
 widget = project.new_target(:app_extension, 'CodexUsageViewerWidget', :osx, '27.0')
