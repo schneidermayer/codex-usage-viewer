@@ -1,7 +1,7 @@
 import SwiftUI
 import WidgetKit
 
-/// Sanitized snapshot presentation, shared by the extension and visual harness.
+/// Shared widget and fixture view.
 struct CodexUsageViewerWidgetContent: View {
     let snapshot: UsageSnapshot
     var family: WidgetFamily?
@@ -183,7 +183,7 @@ struct CodexUsageViewerWidgetContent: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// Seven quiet day segments. Their fill encodes time, not token usage.
+    /// Seven day segments encode time remaining.
     private func resetTrack(_ progress: WeeklyResetProgress?, color: Color, height: CGFloat) -> some View {
         HStack(spacing: isSmall ? 2 : 3) {
             ForEach(0..<7) { day in

@@ -14,7 +14,7 @@ final class CodexExecutableDiscoveryTests: XCTestCase {
 
     private func makeExecutable(_ url: URL) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        // Deliberately not a real executable: discovery must inspect, never run it.
+        // Discovery must inspect this dummy binary without executing it.
         try Data("discovery-fixture-only".utf8).write(to: url)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
     }

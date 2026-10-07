@@ -1,7 +1,7 @@
 import Foundation
 
 extension AccountSnapshot {
-    /// The seven-day quota can be in either slot. Never substitute a session quota.
+    /// Weekly quota may occupy either slot; never substitute session usage.
     var weeklyWindow: QuotaWindow? {
         guard let bucket = primaryBucket else { return nil }
         return [bucket.primary, bucket.secondary].compactMap { $0 }
@@ -58,12 +58,12 @@ struct WeeklyResetProgress: Equatable {
         secondsRemaining = remaining
     }
 
-    /// Always a fraction of seven days, never a fraction of remaining usage.
+    /// Time remaining as a fraction of seven days.
     var fractionRemaining: Double { min(1, max(0, secondsRemaining / Self.duration)) }
 
     var countdown: String {
         if secondsRemaining < 60 { return "<1m" }
-        // Floor avoids claiming more time remains than the timestamp provides.
+        // Round down to avoid overstating time remaining.
         let minutes = Int(min(secondsRemaining / 60, Double(Int.max / 60)))
         let days = minutes / 1_440
         let hours = (minutes % 1_440) / 60
@@ -76,8 +76,7 @@ struct WeeklyResetProgress: Equatable {
 enum WeeklyWidgetTimeline {
     static func dates(snapshot: UsageSnapshot, now: Date, reloadAt: Date) -> [Date] {
         var dates = [now, reloadAt]
-        // Local cached-data entries keep countdowns and time bars moving without
-        // additional network requests. The host still controls actual delivery.
+        // Update countdowns from cached data; the host controls delivery.
         var tick = now.addingTimeInterval(5 * 60)
         while tick < reloadAt {
             dates.append(tick)

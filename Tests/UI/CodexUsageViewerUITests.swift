@@ -3,7 +3,7 @@ import XCTest
 @MainActor
 final class CodexUsageViewerUITests: XCTestCase {
     private func visibleText(_ element: XCUIElement) -> String {
-        // Native AXStaticText exposes its displayed string as value on macOS.
+        // macOS AXStaticText stores its text in value.
         if let value = element.value as? String, !value.isEmpty { return value }
         return element.label
     }
@@ -79,9 +79,9 @@ final class CodexUsageViewerUITests: XCTestCase {
         let badge = app.descendants(matching: .any).matching(identifier: "codexusageviewer.loggedIn.account-1").firstMatch
         XCTAssertTrue(plan.waitForExistence(timeout: 3))
         XCTAssertTrue(badge.waitForExistence(timeout: 3))
-        XCTAssertEqual(plan.label, "Subscription plan: 200")
+        XCTAssertEqual(visibleText(plan), "Subscription plan: 200")
         let fallbackPlan = app.descendants(matching: .any).matching(identifier: "codexusageviewer.plan.account-2").firstMatch
-        XCTAssertEqual(fallbackPlan.label, "Subscription plan: plus")
+        XCTAssertEqual(visibleText(fallbackPlan), "Subscription plan: plus")
         XCTAssertEqual(badge.label, "Logged In")
         XCTAssertTrue(plan.isHittable)
         XCTAssertTrue(badge.isHittable)

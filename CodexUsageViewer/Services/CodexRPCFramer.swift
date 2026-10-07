@@ -1,7 +1,6 @@
 import Foundation
 
-/// Codex stdio is newline-delimited JSON, not Content-Length framing.
-/// Retaining bytes until a complete line also preserves split UTF-8 characters.
+/// Newline-delimited JSON; retain partial bytes to preserve split UTF-8.
 struct CodexRPCFramer {
     private var buffer = Data()
     private let maximumLineBytes: Int

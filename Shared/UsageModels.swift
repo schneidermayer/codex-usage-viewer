@@ -92,8 +92,7 @@ struct AccountSnapshot: Codable, Equatable, Identifiable, Sendable {
     var issue: String?
     var fullName: String? = nil
 
-    // `name` remains in stored snapshots for backward compatibility only.
-    // A custom slot label must never be presented as the OpenAI account's name.
+    // Legacy slot labels remain decodable but are never used as account names.
     var displayName: String {
         if let value = fullName?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty { return value }
         if let value = email?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty { return value }
@@ -101,7 +100,7 @@ struct AccountSnapshot: Codable, Equatable, Identifiable, Sendable {
         return "Account"
     }
 
-    /// Compact tier labels for display only; keep the reported plan unchanged.
+    /// Display labels; preserve the reported plan in storage.
     var subscriptionDisplayName: String? {
         guard let plan = plan?.trimmingCharacters(in: .whitespacesAndNewlines), !plan.isEmpty else { return nil }
         switch plan.lowercased() {
@@ -141,7 +140,7 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
     }
     static var empty: UsageSnapshot { UsageSnapshot(accounts: AccountSnapshot.emptyAccounts, savedAt: .now) }
 
-    // Deliberate fixture, only used by previews and the explicitly labeled demo mode.
+    // Synthetic preview/test data; never persisted.
     static var preview: UsageSnapshot {
         let now = Date.now
         var accounts = AccountSnapshot.emptyAccounts

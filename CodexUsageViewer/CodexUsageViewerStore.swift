@@ -139,7 +139,7 @@ final class CodexUsageViewerStore: ObservableObject {
         let cachedSnapshot = isUITesting ? UsageSnapshot.empty : dependencies.loadSnapshot()
         var cached = cachedSnapshot.accounts
         if !isUITesting {
-            // Reconcile only existence of our own credential files, never their contents.
+            // Check app-owned credential existence, without reading tokens.
             for index in cached.indices where cached[index].state == .disconnected {
                 if dependencies.credentialExists(cached[index].id) {
                     cached[index].state = .needsSignIn
@@ -276,7 +276,7 @@ final class CodexUsageViewerStore: ObservableObject {
             accounts[index].issue = nil
         } catch {
             accounts[index].issue = error.localizedDescription
-            // Preserve the last successful timestamp and data on network failure.
+            // Preserve the last successful snapshot on failure.
         }
     }
 
@@ -324,14 +324,12 @@ final class CodexUsageViewerStore: ObservableObject {
     }
 
     func cancelLogin() async {
-        // The sheet button, binding, and dismissal callback may all cancel.
-        // Only the first caller owns cleanup for this visible login attempt.
+        // Multiple dismissal callbacks may cancel; only the first owns cleanup.
         guard let accountID = login?.id else { return }
         let loginID = activeLoginID
         let task = loginTask
         loginAttemptID = nil
-        // If start is still in flight, let it return its login ID so the task can
-        // cancel that exact browser flow. Canceling the RPC would lose the ID.
+        // Wait for an in-flight start to return the ID needed to cancel its login.
         if loginID != nil { task?.cancel() }
         activeLoginID = nil
         login = nil

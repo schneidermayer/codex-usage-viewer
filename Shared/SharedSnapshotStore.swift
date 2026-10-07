@@ -12,7 +12,7 @@ enum SharedSnapshotStore {
               let data = try? Data(contentsOf: url),
               let snapshot = try? JSONDecoder().decode(UsageSnapshot.self, from: data),
               snapshot.version == 1 else { return .empty }
-        // Only the three stable slots are accepted from disk.
+        // Ignore unknown account slots.
         var safe = UsageSnapshot.empty
         for index in safe.accounts.indices {
             if let account = snapshot.accounts.first(where: { $0.id == safe.accounts[index].id }) {
@@ -40,7 +40,7 @@ enum SharedSnapshotStore {
             throw CocoaError(.fileWriteUnknown)
         }
         defer { try? manager.removeItem(at: temporary) }
-        // Publish a complete file whose permissions were private from creation.
+        // Atomically publish the already-private file.
         guard Darwin.rename(temporary.path, url.path) == 0 else {
             throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
         }

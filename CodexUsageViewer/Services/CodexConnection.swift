@@ -46,7 +46,7 @@ protocol CodexAccountConnection: AnyObject {
     func stop()
 }
 
-/// One child process and one private CODEX_HOME per account. No inference requests.
+/// One process and private CODEX_HOME per account.
 @MainActor
 final class CodexConnection: CodexAccountConnection {
     let accountID: String
@@ -87,7 +87,7 @@ final class CodexConnection: CodexAccountConnection {
         self.localIdentityOnly = false
     }
 
-    // Explicit test seam; production always uses the app-owned Accounts directory.
+    // Tests inject temporary homes; production uses app-owned accounts.
     init(accountID: String, executableURL: URL, accountRoot: URL, requestTimeout: TimeInterval, loginTimeout: TimeInterval = 900) {
         self.accountID = accountID
         self.executableURL = executableURL
@@ -106,14 +106,12 @@ final class CodexConnection: CodexAccountConnection {
         localIdentityOnly = true
     }
 
-    /// Reads only identity from the user's normal CLI context. Codex owns loading
-    /// its existing auth storage; this app never parses or copies its tokens.
+    /// Reads local identity through Codex, without accessing its tokens.
     static func readLocalIdentity(executableURL: URL) async throws -> CodexIdentity? {
         let codexHome = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex", isDirectory: true)
         return try await readLocalIdentity(executableURL: executableURL, codexHome: codexHome)
     }
 
-    // A temporary home can be supplied by protocol tests without touching real auth.
     static func readLocalIdentity(executableURL: URL, codexHome: URL, requestTimeout: TimeInterval = 10) async throws -> CodexIdentity? {
         var directory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: codexHome.path, isDirectory: &directory), directory.boolValue else { return nil }
@@ -168,8 +166,7 @@ final class CodexConnection: CodexAccountConnection {
                     catch { return }
                     guard let self else { return }
                     self.finishLogin(loginID, result: .failure(CodexConnectionError.loginTimedOut))
-                    // finishLogin cancels this timeout task; send the cancellation from
-                    // a fresh task so request() does not immediately throw cancellation.
+                    // finishLogin cancels this task; send the RPC from a fresh task.
                     Task { [weak self] in await self?.cancelLogin(loginID: loginID) }
                 }
                 logins[loginID] = PendingLogin(continuation: continuation, timeout: timeout)
@@ -267,7 +264,7 @@ final class CodexConnection: CodexAccountConnection {
         child.environment = Self.isolatedEnvironment(executableURL: executableURL, accountDirectory: folder)
         child.standardInput = stdin
         child.standardOutput = stdout
-        // Server diagnostics may contain sensitive data. They are never captured or logged.
+        // Diagnostics may contain credentials; discard them.
         child.standardError = FileHandle.nullDevice
         input = stdin.fileHandleForWriting
         output = stdout.fileHandleForReading
@@ -278,7 +275,7 @@ final class CodexConnection: CodexAccountConnection {
             Task { @MainActor [weak self] in
                 guard let self, self.generation == currentGeneration else { return }
                 if data.isEmpty {
-                    // Let a response already queued by the final read reach its continuation.
+                    // Deliver the final queued response before reporting process exit.
                     try? await Task.sleep(nanoseconds: 50_000_000)
                     guard self.generation == currentGeneration else { return }
                     self.endTransport(with: CodexConnectionError.stopped)
@@ -348,7 +345,7 @@ final class CodexConnection: CodexAccountConnection {
                 }
                 if let method = message["method"] as? String {
                     if let id = message["id"] {
-                        // CodexUsageViewer never starts threads or accepts tool, shell, or token-refresh requests.
+                        // Reject unsolicited tool, shell, and token-refresh requests.
                         try write(["id": id, "error": ["code": -32601, "message": "Unsupported method"]])
                     } else if method == "account/login/completed",
                               let params = message["params"] as? [String: Any],
@@ -455,7 +452,7 @@ final class CodexConnection: CodexAccountConnection {
                          standardPaths: ["/opt/homebrew/bin/codex", "/usr/local/bin/codex", "/Applications/Codex.app/Contents/Resources/codex"])
     }
 
-    // Discovery only reads metadata. It never executes candidate CLIs to compare versions.
+    // Inspect metadata without executing candidate CLIs.
     static func locateExecutable(override: String?, environment: [String: String], userDirectory: URL, standardPaths: [String]) -> URL? {
         let manager = FileManager.default
         func executable(_ path: String) -> URL? {
@@ -523,8 +520,7 @@ final class CodexConnection: CodexAccountConnection {
         let target = "x86_64-apple-darwin"
         #endif
         let manager = FileManager.default
-        // npm has used both embedded vendor trees and optional platform packages.
-        // Resolve the same platform package locations without evaluating JavaScript.
+        // Resolve npm's embedded and optional-package layouts without running JavaScript.
         struct PackageMetadata: Decodable { let optionalDependencies: [String: String]? }
         let metadata = (try? Data(contentsOf: root.appendingPathComponent("package.json")))
             .flatMap { try? JSONDecoder().decode(PackageMetadata.self, from: $0) }
@@ -534,8 +530,7 @@ final class CodexConnection: CodexAccountConnection {
             let optionalRoots = [root.appendingPathComponent("node_modules/@openai/\(platformPackage)"),
                                  root.deletingLastPathComponent().appendingPathComponent(platformPackage)]
             if let installed = optionalRoots.first(where: { manager.fileExists(atPath: $0.appendingPathComponent("package.json").path) }) {
-                // A resolved platform package with a missing native binary is broken;
-                // the wrapper does not fall back to an older embedded binary.
+                // A broken platform package cannot fall back to an embedded binary.
                 selectedRoot = installed
             }
         }
@@ -549,8 +544,7 @@ final class CodexConnection: CodexAccountConnection {
                   layout.layoutVersion == 1, layout.target == target, layout.entrypoint == "bin/codex" else { return nil }
             entrypoint = layout.entrypoint
         } else {
-            // Modern platform packages ship explicit layout metadata. Never let a
-            // leftover legacy binary satisfy a broken modern installation.
+            // Legacy files must not mask a broken modern installation.
             guard !usesPlatformPackage else { return nil }
             entrypoint = "codex/codex"
         }
@@ -562,9 +556,7 @@ final class CodexConnection: CodexAccountConnection {
     }
 }
 
-/// Display-only metadata from this app's own managed login. This does not verify
-/// authentication: the official account/read response remains the identity source.
-/// Token bytes are never exposed, copied to snapshots, or logged.
+/// Display names from app-owned logins, bound to account/read identity. Never expose tokens.
 enum CodexProfileName {
     static func readFromAppOwnedAccount(directory: URL, matchingEmail: String) -> String? {
         let url = directory.appendingPathComponent("auth.json")

@@ -5,8 +5,7 @@ struct ChromeProfile: Identifiable, Equatable, Sendable {
     let id: String
     let name: String
 
-    /// Reads display names from Chrome's profile index only. No cookie databases,
-    /// sign-in tokens, profile preferences, or browsing history are accessed.
+    /// Reads Chrome's profile index, without cookies or sign-in data.
     static func discover() -> [ChromeProfile] {
         let state = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Google/Chrome/Local State")
@@ -37,8 +36,7 @@ struct ChromeProfile: Identifiable, Equatable, Sendable {
         value.range(of: #"\A(Default|Profile [0-9]+)\z"#, options: .regularExpression) != nil
     }
 
-    /// Creates a new Chrome launch request with an explicit profile argument so
-    /// the OAuth URL is routed to the selected existing Chrome profile.
+    /// Routes sign-in to the selected Chrome profile.
     @MainActor
     static func open(_ url: URL, profileID: String) async throws {
         guard isValidDirectory(profileID), discover().contains(where: { $0.id == profileID }) else {

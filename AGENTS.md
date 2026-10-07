@@ -1,15 +1,12 @@
 # Codex Usage Viewer
 
-Native macOS 27 SwiftUI app and WidgetKit extension for three Codex accounts.
-
-- Respect native Liquid Glass. Use system typography, semantic colors, accessible controls, and restrained account accents.
-- Never copy, log, or commit the user's existing Codex or browser credentials. Each connected account gets an app-owned authentication directory. The user authorized detecting the normal local Codex identity: use only the official read-only account method in that context, never login/logout or inference.
-- The widget reads only a sanitized usage snapshot. Credentials stay outside the shared app group.
-- Missing or expired usage is unknown, never zero. Reset timestamps do not prove that a quota has recovered.
-- No inference requests are needed to read limits. Use the documented Codex app-server account methods.
-- Verify with Swift tests, a native Xcode build, and UI interaction/visual checks. State any live-account or widget-host checks that could not run.
-- Display full account names, with email fallback. Read name claims only from app-owned logins and bind them to the official account email; never log tokens or read the normal Codex login for names.
-- Widgets show only weekly usage and time until reset, with a seven-day time bar and numeric countdown. Omit the header and visible "left" wording. Small and medium widgets show the subscription before the bar; every widget size replaces the locally logged-in account's dot with a computer icon. Keep subscription type visible beside the Logged In badge in the app.
-- Display Prolite as 100, Pro as 200, and Promax as 500 in the app and widgets. Preserve other reported subscription names and never guess a missing plan.
-- Do not add a menu bar tray icon.
-- Release builds show the bare VERSION (for example 1.0). Development builds append the number of commits since the nearest reachable numeric release tag (for example 1.0-1). Releases create annotated numeric tags before building, so release 1.0 displays 1.0. Use scripts/release.py; never move a published release tag.
+- Native SwiftUI/WidgetKit, macOS 27, three accounts, Liquid Glass. Use semantic colors, system type, and accessible controls. No menu bar tray icon.
+- Each account uses a private app-owned `CODEX_HOME`. Never copy, log, or commit credentials. Widgets receive only sanitized snapshots.
+- Use Codex app-server account methods, without inference. Read the default local identity through read-only `account/read`; never login, logout, or refresh its tokens.
+- Read full names only from app-owned logins, matched to the official account email. Fall back to email; never read normal Codex tokens for names.
+- Missing, stale, or expired limits are unknown. A reset timestamp does not prove quota recovery.
+- Widgets: weekly usage, seven-day reset bar, numeric countdown; no header or "left" text. Small/medium show the subscription before the bar. All sizes use a computer icon for the local account.
+- Keep the subscription and **Logged In** badge visible together in the app. Map Prolite → 100, Pro → 200, Promax → 500; preserve other names and missing values.
+- Validate code with Swift tests, a native build, and UI/visual checks. Distinguish fixture renders from live-account and desktop widget checks.
+- Finish every task involving code changes by building the current source, stopping all existing app/widget instances and their child workers, installing in `/Applications`, restarting, and verifying the running executable and version match the new build.
+- `VERSION` is the release number. Tagged builds display it alone; development builds append commits since the nearest numeric release tag. Use `scripts/release.py`; never move a published tag.

@@ -6,7 +6,7 @@ final class CodexProfileNameTests: XCTestCase {
     private func authData(claims: [String: Any]) throws -> Data {
         let payload = try JSONSerialization.data(withJSONObject: claims).base64EncodedString()
             .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
-        // Synthetic, deliberately unsigned fixture. Never used for authentication.
+        // Unsigned display-name fixture, not authentication evidence.
         return try JSONSerialization.data(withJSONObject: ["tokens": ["id_token": "fixture-header.\(payload).fixture-signature"]])
     }
 
