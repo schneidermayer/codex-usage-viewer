@@ -185,23 +185,8 @@ struct CodexUsageViewerWidgetContent: View {
 
     /// Seven day segments encode time remaining.
     private func resetTrack(_ progress: WeeklyResetProgress?, color: Color, height: CGFloat) -> some View {
-        HStack(spacing: isSmall ? 2 : 3) {
-            ForEach(0..<7) { day in
-                GeometryReader { geometry in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Color.primary.opacity(0.075))
-                        if let progress {
-                            Capsule()
-                                .fill(color)
-                                .frame(width: geometry.size.width * min(1, max(0, progress.fractionRemaining * 7 - Double(day))))
-                                .widgetAccentable()
-                        }
-                    }
-                }
-            }
-        }
-        .frame(height: height)
-        .accessibilityHidden(true)
+        CodexUsageViewerResetTrack(fractionRemaining: progress?.fractionRemaining, accent: color,
+                                  height: height, spacing: isSmall ? 2 : 3, widgetAccentable: true)
     }
 
     private func accountIndicator(_ account: AccountSnapshot, index: Int) -> some View {

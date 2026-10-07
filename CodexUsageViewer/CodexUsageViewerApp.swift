@@ -53,8 +53,12 @@ final class CodexUsageViewerAppDelegate: NSObject, NSApplicationDelegate {
     weak var store: CodexUsageViewerStore?
     func applicationDidFinishLaunching(_ notification: Notification) {
         let arguments = ProcessInfo.processInfo.arguments
-        if arguments.contains("--ui-testing"), arguments.contains("--dark-appearance") {
-            NSApp.appearance = NSAppearance(named: .darkAqua)
+        if arguments.contains("--ui-testing") {
+            if arguments.contains("--dark-appearance") {
+                NSApp.appearance = NSAppearance(named: .darkAqua)
+            } else if arguments.contains("--light-appearance") {
+                NSApp.appearance = NSAppearance(named: .aqua)
+            }
         }
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }

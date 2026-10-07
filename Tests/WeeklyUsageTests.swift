@@ -54,6 +54,23 @@ final class WeeklyUsageTests: XCTestCase {
         XCTAssertEqual(value.weeklyUsage(at: now), .unavailable)
     }
 
+    func testSessionResetUsesItsOwnDurationAndRejectsUnknownOrExpiredTime() throws {
+        var window = QuotaWindow(usedPercent: 95, windowDurationMins: 300, resetsAt: 1_900_009_000)
+        let progress = try XCTUnwrap(QuotaResetProgress(window: window, at: now))
+        XCTAssertEqual(progress.fractionRemaining, 0.5, accuracy: 0.000_001)
+        XCTAssertEqual(progress.countdown, "2h 30m")
+        XCTAssertNil(WeeklyResetProgress(window: window, at: now))
+        window.windowDurationMins = nil
+        XCTAssertNil(QuotaResetProgress(window: window, at: now))
+        window.windowDurationMins = 0
+        XCTAssertNil(QuotaResetProgress(window: window, at: now))
+        window.windowDurationMins = 300
+        window.resetsAt = 1_900_000_000
+        XCTAssertNil(QuotaResetProgress(window: window, at: now))
+        window.resetsAt = nil
+        XCTAssertNil(QuotaResetProgress(window: window, at: now))
+    }
+
     func testMissingResetDoesNotInventCountdownOrDiscardValidWeeklyUsage() {
         var window = weekly()
         window.resetsAt = nil

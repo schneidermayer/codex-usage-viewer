@@ -1,4 +1,5 @@
 import SwiftUI
+import WidgetKit
 
 enum CodexUsageViewerPalette {
     static let mint = Color(red: 0.24, green: 0.68, blue: 0.53)
@@ -76,6 +77,35 @@ struct CodexUsageViewerQuotaRing: View {
                 .rotationEffect(.degrees(-90))
         }
         .padding(lineWidth / 2)
+        .accessibilityHidden(true)
+    }
+}
+
+struct CodexUsageViewerResetTrack: View {
+    var fractionRemaining: Double?
+    var accent: Color
+    var segments = 7
+    var height: CGFloat = 6
+    var spacing: CGFloat = 4
+    var widgetAccentable = false
+
+    var body: some View {
+        HStack(spacing: spacing) {
+            ForEach(0..<segments, id: \.self) { segment in
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.primary.opacity(0.075))
+                        if let fractionRemaining {
+                            Capsule()
+                                .fill(accent)
+                                .frame(width: geometry.size.width * min(1, max(0, fractionRemaining * Double(segments) - Double(segment))))
+                                .widgetAccentable(widgetAccentable)
+                        }
+                    }
+                }
+            }
+        }
+        .frame(height: height)
         .accessibilityHidden(true)
     }
 }

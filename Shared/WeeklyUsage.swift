@@ -49,17 +49,33 @@ enum WeeklyUsageState: Equatable {
 
 struct WeeklyResetProgress: Equatable {
     static let duration: TimeInterval = 7 * 24 * 60 * 60
+    private let progress: QuotaResetProgress
+
+    init?(window: QuotaWindow, at date: Date = .now) {
+        guard window.windowDurationMins == 10_080,
+              let progress = QuotaResetProgress(window: window, at: date) else { return nil }
+        self.progress = progress
+    }
+
+    var secondsRemaining: TimeInterval { progress.secondsRemaining }
+    var fractionRemaining: Double { progress.fractionRemaining }
+    var countdown: String { progress.countdown }
+}
+
+struct QuotaResetProgress: Equatable {
+    let duration: TimeInterval
     let secondsRemaining: TimeInterval
 
     init?(window: QuotaWindow, at date: Date = .now) {
-        guard window.windowDurationMins == 10_080, let resetDate = window.resetDate else { return nil }
+        guard let minutes = window.windowDurationMins, minutes > 0,
+              let resetDate = window.resetDate else { return nil }
         let remaining = resetDate.timeIntervalSince(date)
         guard remaining.isFinite, remaining > 0 else { return nil }
+        duration = Double(minutes) * 60
         secondsRemaining = remaining
     }
 
-    /// Time remaining as a fraction of seven days.
-    var fractionRemaining: Double { min(1, max(0, secondsRemaining / Self.duration)) }
+    var fractionRemaining: Double { min(1, max(0, secondsRemaining / duration)) }
 
     var countdown: String {
         if secondsRemaining < 60 { return "<1m" }
