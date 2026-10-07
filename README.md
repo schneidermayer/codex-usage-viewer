@@ -2,9 +2,19 @@
 
 Native macOS app and desktop widgets for three Codex accounts. Shows remaining usage, reset times, and the account logged in to local Codex.
 
-[Download](https://github.com/schneidermayer/codex-usage-viewer/releases/latest) · Requires macOS 27 and a separately installed [Codex CLI](https://learn.chatgpt.com/docs/codex/cli).
+[Download](https://github.com/schneidermayer/codex-usage-viewer/releases/latest) · Requires macOS and a separately installed [Codex CLI](https://learn.chatgpt.com/docs/codex/cli).
 
-![Widget preview with sample accounts](docs/images/widget-medium.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/dashboard-dark.png">
+  <img src="docs/images/dashboard-light.png" alt="Codex Usage Viewer with three sample accounts and the Logged In badge">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/widget-medium.png">
+  <img src="docs/images/widget-medium-light.png" width="540" alt="Weekly usage widget with subscription labels and reset countdowns">
+</picture>
+
+*Sample accounts. Widget images are layout previews.*
 
 ## Setup
 
@@ -20,7 +30,7 @@ Widget percentages show weekly usage remaining; bars and countdowns show time un
 
 ## Build and test
 
-Requires Xcode with the macOS 27 SDK. Configure your signing identity, team, and App Group for both targets in `CodexUsageViewer.xcodeproj`.
+Requires Xcode with the macOS SDK. Configure your signing identity, team, and App Group for both targets in `CodexUsageViewer.xcodeproj`.
 
 ```sh
 ./scripts/build.sh

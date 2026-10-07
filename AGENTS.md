@@ -1,6 +1,6 @@
 # Codex Usage Viewer
 
-- Native SwiftUI/WidgetKit, macOS 27, three accounts, Liquid Glass. Use semantic colors, system type, and accessible controls. No menu bar tray icon.
+- Native SwiftUI/WidgetKit, macOS, three accounts, Liquid Glass. Use semantic colors, system type, and accessible controls. No menu bar tray icon.
 - Each account uses a private app-owned `CODEX_HOME`. Never copy, log, or commit credentials. Widgets receive only sanitized snapshots.
 - Use Codex app-server account methods, without inference. Read the default local identity through read-only `account/read`; never login, logout, or refresh its tokens.
 - Read full names only from app-owned logins, matched to the official account email. Fall back to email; never read normal Codex tokens for names.
