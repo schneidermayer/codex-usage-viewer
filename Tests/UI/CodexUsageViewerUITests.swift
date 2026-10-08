@@ -52,6 +52,9 @@ final class CodexUsageViewerUITests: XCTestCase {
         app.buttons["codexusageviewer.settings"].click()
         let field = app.textFields["codexusageviewer.settings.executable"]
         XCTAssertTrue(field.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Background updates"].exists)
+        XCTAssertTrue(app.staticTexts["codexusageviewer.settings.backgroundStatus"].exists)
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "codexusageviewer.settings.loginItems").firstMatch.isHittable)
         let originalValue = field.value as? String ?? ""
         field.click()
         field.typeKey("a", modifierFlags: .command)

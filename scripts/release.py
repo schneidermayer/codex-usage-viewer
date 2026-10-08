@@ -49,7 +49,10 @@ def main():
     if info['display'] != args.version or info['commit'] != git(ROOT, 'rev-parse', 'HEAD'):
         raise RuntimeError('built version does not match the release tag')
     run('codesign', '--verify', '--deep', '--strict', str(app))
-    for bundle in [app, *app.glob('Contents/PlugIns/*.appex')]:
+    helper = app / 'Contents/MacOS/CodexUsageViewerHelper'
+    if not helper.is_file():
+        raise RuntimeError('built app is missing its background helper')
+    for bundle in [app, helper, *app.glob('Contents/PlugIns/*.appex')]:
         details = subprocess.run(['codesign', '-dv', '--verbose=4', str(bundle)], check=True, capture_output=True, text=True).stderr
         raw = subprocess.run(['codesign', '-d', '--entitlements', ':-', str(bundle)], check=True, capture_output=True).stdout
         entitlements = plistlib.loads(raw)

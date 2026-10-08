@@ -1,7 +1,23 @@
 import AppKit
 import SwiftUI
+import WidgetKit
 
 @main
+enum CodexUsageViewerMain {
+    @MainActor static func main() {
+        if CommandLine.arguments.contains("--reload-widgets") {
+            // WidgetKit associates reloads with this executable's containing app.
+            // Do not initialize SwiftUI/NSApplication: this process has no UI,
+            // Dock presence, account connections, or background registration.
+            WidgetCenter.shared.reloadTimelines(ofKind: CodexUsageViewerConstants.widgetKind)
+            WidgetCenter.shared.getCurrentConfigurations { _ in exit(EXIT_SUCCESS) }
+            RunLoop.main.run(until: Date.now.addingTimeInterval(5))
+            return
+        }
+        CodexUsageViewerApp.main()
+    }
+}
+
 struct CodexUsageViewerApp: App {
     @NSApplicationDelegateAdaptor(CodexUsageViewerAppDelegate.self) private var appDelegate
     @StateObject private var store = CodexUsageViewerStore()

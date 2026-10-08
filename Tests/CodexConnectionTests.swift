@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import XCTest
 @testable import CodexUsageViewerCore
 
@@ -41,8 +42,17 @@ final class CodexConnectionTests: XCTestCase {
         let executable = base.appendingPathComponent("fake-codex")
         let script = """
         #!/usr/bin/python3
-        import json, os, sys, time
+        import json, os, signal, subprocess, sys, time
         mode = "\(mode)"
+        if mode == "ignore-term":
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        if mode in ("ignore-term", "descendant"):
+            pids = [os.getpid()]
+            if mode == "descendant":
+                worker = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                pids.append(worker.pid)
+            with open(os.path.join(os.path.dirname(sys.argv[0]), "worker-pids"), "w") as marker:
+                json.dump(pids, marker)
         ready = False
         def send(payload):
             data = (json.dumps(payload, ensure_ascii=False) + "\\n").encode("utf-8")
@@ -93,6 +103,8 @@ final class CodexConnectionTests: XCTestCase {
                 send({"id": request_id, "result": {"status": "canceled"}})
             elif method == "account/logout":
                 send({"id": request_id, "result": {}})
+        while mode == "ignore-term":
+            time.sleep(1)
         """
         try Data(script.utf8).write(to: executable)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
@@ -304,6 +316,34 @@ final class CodexConnectionTests: XCTestCase {
         connection.stop()
         let identity = try await connection.account()
         XCTAssertEqual(identity?.type, "chatgpt")
+    }
+
+    func testStopTerminatesWorkerDescendants() async throws {
+        try await checkStoppedWorkers(mode: "descendant", expectedWorkerCount: 2)
+    }
+
+    func testStopEscalatesWhenWorkerIgnoresTermination() async throws {
+        try await checkStoppedWorkers(mode: "ignore-term", expectedWorkerCount: 1)
+    }
+
+    private func checkStoppedWorkers(mode: String, expectedWorkerCount: Int) async throws {
+        let fixture = try fixture(mode)
+        let connection = fixture.connection()
+        var pids: [pid_t] = []
+        defer {
+            connection.stop()
+            // Bound the fixture lifetime even if an assertion fails.
+            pids.filter { kill($0, 0) == 0 }.forEach { _ = kill($0, SIGKILL) }
+            fixture.remove()
+        }
+        _ = try await connection.account()
+        pids = try JSONDecoder().decode([pid_t].self, from: Data(contentsOf: fixture.base.appendingPathComponent("worker-pids")))
+        XCTAssertEqual(pids.count, expectedWorkerCount)
+        connection.stop()
+        for _ in 0..<400 where pids.contains(where: { kill($0, 0) == 0 }) {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(pids.allSatisfy { kill($0, 0) != 0 }, "Stopping a connection must also stop its workers")
     }
 
     func testAccountPathTraversalIsRejected() async throws {

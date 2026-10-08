@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import ServiceManagement
 
 struct CodexUsageViewerSettingsView: View {
     @ObservedObject var store: CodexUsageViewerStore
@@ -58,7 +59,25 @@ struct CodexUsageViewerSettingsView: View {
             .background(.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 16))
 
             VStack(alignment: .leading, spacing: 15) {
-                detail(symbol: "arrow.clockwise", title: "Automatic refresh", text: "Codex Usage Viewer checks connected accounts every three minutes while it’s running. macOS chooses when widgets refresh.")
+                detail(symbol: "arrow.clockwise", title: "Background updates", text: "A small helper checks connected accounts every three minutes, even after you quit the app. It starts when you log in and has no Dock or menu bar icon. macOS chooses when widgets refresh.")
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(store.backgroundStatus)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("codexusageviewer.settings.backgroundStatus")
+                    HStack {
+                        Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
+                            .accessibilityIdentifier("codexusageviewer.settings.loginItems")
+                        if !store.backgroundNeedsApproval && !store.backgroundConnected {
+                            Button("Retry") { Task { await store.retryBackgroundService() } }
+                                .accessibilityIdentifier("codexusageviewer.settings.retryBackground")
+                        }
+                    }
+                    .buttonStyle(.link)
+                    .font(.system(size: 11))
+                }
+                .padding(.leading, 34)
                 detail(symbol: "lock.shield", title: "Private account connections", text: "Each account has its own connection on this Mac. Your widget receives usage snapshots; it never receives sign-in credentials.")
                 detail(symbol: "clock", title: "Last reported usage", text: "Usage shows the last successful update. A reset countdown never assumes that a limit has recovered.")
             }

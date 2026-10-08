@@ -14,7 +14,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "6C19D9ED7D21A332404E17E5"
+               BlueprintIdentifier = "1E4E7986F2E39509528D2E7C"
                BuildableName = "CodexUsageViewer.app"
                BlueprintName = "CodexUsageViewer"
                ReferencedContainer = "container:CodexUsageViewer.xcodeproj">
@@ -30,7 +30,7 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "6C19D9ED7D21A332404E17E5"
+            BlueprintIdentifier = "1E4E7986F2E39509528D2E7C"
             BuildableName = "CodexUsageViewer.app"
             BlueprintName = "CodexUsageViewer"
             ReferencedContainer = "container:CodexUsageViewer.xcodeproj">
@@ -41,7 +41,7 @@
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "3DAD98C9C06197FF127B32F6"
+               BlueprintIdentifier = "3248914E613802A01A5951B8"
                BuildableName = "CodexUsageViewerUITests.xctest"
                BlueprintName = "CodexUsageViewerUITests"
                ReferencedContainer = "container:CodexUsageViewer.xcodeproj">
@@ -63,7 +63,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "6C19D9ED7D21A332404E17E5"
+            BlueprintIdentifier = "1E4E7986F2E39509528D2E7C"
             BuildableName = "CodexUsageViewer.app"
             BlueprintName = "CodexUsageViewer"
             ReferencedContainer = "container:CodexUsageViewer.xcodeproj">
@@ -80,7 +80,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "6C19D9ED7D21A332404E17E5"
+            BlueprintIdentifier = "1E4E7986F2E39509528D2E7C"
             BuildableName = "CodexUsageViewer.app"
             BlueprintName = "CodexUsageViewer"
             ReferencedContainer = "container:CodexUsageViewer.xcodeproj">

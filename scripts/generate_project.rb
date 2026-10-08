@@ -28,18 +28,22 @@ project.build_configurations.each do |config|
 end
 app = project.new_target(:application, 'CodexUsageViewer', :osx, '27.0')
 widget = project.new_target(:app_extension, 'CodexUsageViewerWidget', :osx, '27.0')
+helper = project.new_target(:command_line_tool, 'CodexUsageViewerHelper', :osx, '27.0')
 groups = {}
-%w[CodexUsageViewer Shared CodexUsageViewerWidget Config Tests].each { |name| groups[name] = project.main_group.new_group(name, name) }
+%w[CodexUsageViewer Shared Background CodexUsageViewerHelper CodexUsageViewerWidget Config Tests].each { |name| groups[name] = project.main_group.new_group(name, name) }
 refs = {}
-Dir.glob('{CodexUsageViewer,Shared,CodexUsageViewerWidget}/**/*.swift').sort.each do |path|
+Dir.glob('{CodexUsageViewer,Shared,Background,CodexUsageViewerHelper,CodexUsageViewerWidget}/**/*.swift').sort.each do |path|
   top, rest = path.split('/', 2)
   refs[path] = groups[top].new_file(rest)
 end
 refs.each do |path, ref|
-  app.source_build_phase.add_file_reference(ref) if path.start_with?('CodexUsageViewer/', 'Shared/')
+  app.source_build_phase.add_file_reference(ref) if path.start_with?('CodexUsageViewer/', 'Shared/', 'Background/')
   widget.source_build_phase.add_file_reference(ref) if path.start_with?('CodexUsageViewerWidget/', 'Shared/')
+  if path.start_with?('CodexUsageViewerHelper/', 'Background/', 'Shared/', 'CodexUsageViewer/Services/') || path == 'CodexUsageViewer/CodexUsageViewerStore.swift'
+    helper.source_build_phase.add_file_reference(ref)
+  end
 end
-Dir.glob('Config/*').sort.each { |path| groups['Config'].new_file(File.basename(path)) }
+Dir.glob('Config/*').sort.each { |path| refs[path] = groups['Config'].new_file(File.basename(path)) }
 if Dir.exist?('CodexUsageViewer/Assets.xcassets')
   app.resources_build_phase.add_file_reference(groups['CodexUsageViewer'].new_file('Assets.xcassets'))
 end
@@ -69,10 +73,35 @@ end
     end
   end
 end
+helper_version_phase = helper.new_shell_script_build_phase('Derive helper version from Git')
+helper_version_phase.shell_script = 'python3 "${SRCROOT}/scripts/version.py" --write-plist "${DERIVED_FILE_DIR}/CodexUsageViewerHelper-Info.plist" --plist-template "${SRCROOT}/Config/CodexUsageViewerHelper-Info.plist"'
+helper_version_phase.input_paths = ['$(SRCROOT)/Config/CodexUsageViewerHelper-Info.plist', '$(SRCROOT)/VERSION', '$(SRCROOT)/scripts/version.py']
+helper_version_phase.output_paths = ['$(DERIVED_FILE_DIR)/CodexUsageViewerHelper-Info.plist']
+helper_version_phase.always_out_of_date = '1'
+helper.build_phases.delete(helper_version_phase)
+helper.build_phases.unshift(helper_version_phase)
+helper.build_configurations.each do |config|
+  config.build_settings.merge!({
+    'PRODUCT_BUNDLE_IDENTIFIER' => 'com.inndevs.codexusageviewer.helper',
+    'INFOPLIST_FILE' => '$(DERIVED_FILE_DIR)/CodexUsageViewerHelper-Info.plist',
+    'CREATE_INFOPLIST_SECTION_IN_BINARY' => 'YES',
+    'CODE_SIGN_ENTITLEMENTS' => 'Config/CodexUsageViewerHelper.entitlements',
+    'LD_RUNPATH_SEARCH_PATHS' => ['$(inherited)', '@executable_path/../Frameworks'],
+    'SKIP_INSTALL' => 'YES'
+  })
+end
 app.add_dependency(widget)
+app.add_dependency(helper)
 embed = app.new_copy_files_build_phase('Embed App Extensions')
 embed.dst_subfolder_spec = '13'
 embed.add_file_reference(widget.product_reference).settings = { 'ATTRIBUTES' => ['RemoveHeadersOnCopy'] }
+embed_helper = app.new_copy_files_build_phase('Embed Background Helper')
+embed_helper.dst_subfolder_spec = '6'
+embed_helper.add_file_reference(helper.product_reference).settings = { 'ATTRIBUTES' => ['CodeSignOnCopy'] }
+embed_agent = app.new_copy_files_build_phase('Embed Launch Agent')
+embed_agent.dst_subfolder_spec = '1'
+embed_agent.dst_path = 'Contents/Library/LaunchAgents'
+embed_agent.add_file_reference(refs['Config/com.inndevs.codexusageviewer.helper.plist'])
 version_phase = app.shell_script_build_phases.find { |phase| phase.name == 'Derive version from Git' }
 app.build_phases.delete(version_phase)
 app.build_phases << version_phase

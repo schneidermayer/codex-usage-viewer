@@ -79,6 +79,21 @@ class VersionTests(unittest.TestCase):
         (self.root / 'VERSION').write_text('1.1\n')
         self.assertEqual(version.version_info(self.root)['display'], '1.1-0')
 
+    def test_executable_plist_keeps_build_settings_and_stamps_version(self):
+        template = self.root / 'Helper-Info.plist'
+        original = {'CFBundleIdentifier': '$(PRODUCT_BUNDLE_IDENTIFIER)', 'LSBackgroundOnly': True}
+        template.write_bytes(plistlib.dumps(original))
+        output = self.root / 'DerivedFiles/Helper-Info.plist'
+        info = version.version_info(self.root)
+        version.write_plist(output, info, template)
+        plist = plistlib.loads(output.read_bytes())
+        self.assertEqual(plist['CFBundleIdentifier'], '$(PRODUCT_BUNDLE_IDENTIFIER)')
+        self.assertTrue(plist['LSBackgroundOnly'])
+        self.assertEqual(plist['CFBundleShortVersionString'], info['base'])
+        self.assertEqual(plist['CFBundleVersion'], info['build'])
+        self.assertEqual(plist['CodexUsageViewerDisplayVersion'], info['display'])
+        self.assertEqual(plistlib.loads(template.read_bytes()), original)
+
 
 if __name__ == '__main__':
     unittest.main()

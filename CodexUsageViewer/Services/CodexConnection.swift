@@ -49,6 +49,38 @@ protocol CodexAccountConnection: AnyObject {
 /// One process and private CODEX_HOME per account.
 @MainActor
 final class CodexConnection: CodexAccountConnection {
+    /// The launchd-owned helper sets this before opening any connections. A
+    /// Foundation Process normally starts a new process group; the worker entry
+    /// rejoins the helper's group so launchd also cleans up Codex after a crash.
+    static var workerLauncherURL: URL?
+
+    static func runWorkerIfRequested() {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard arguments.dropFirst().first == "--codex-worker" else { return }
+        guard arguments.count >= 5,
+              let parent = pid_t(arguments[2]), parent > 1,
+              let group = pid_t(arguments[3]), group > 1,
+              getppid() == parent, getpgid(parent) == group,
+              arguments[4].hasPrefix("/"),
+              !arguments.dropFirst(4).contains(where: { $0.utf8.contains(0) }) else { _exit(64) }
+        guard setpgid(0, group) == 0 else { _exit(71) }
+        // Parent death before joining could otherwise escape launchd's cleanup.
+        guard getppid() == parent else { _exit(71) }
+        // The helper ignores these signals while its dispatch sources handle
+        // them. Codex must receive normal signal behavior after exec.
+        for value in [SIGTERM, SIGINT, SIGHUP] { signal(value, SIG_DFL) }
+        var mask = sigset_t()
+        sigemptyset(&mask)
+        sigprocmask(SIG_SETMASK, &mask, nil)
+        var argv = arguments.dropFirst(4).map { strdup($0) }
+        guard !argv.contains(where: { $0 == nil }) else { _exit(71) }
+        argv.append(nil)
+        argv.withUnsafeMutableBufferPointer { buffer in
+            _ = execv(arguments[4], buffer.baseAddress!)
+        }
+        _exit(71)
+    }
+
     let accountID: String
     private let executableURL: URL
     private let accountRoot: URL
@@ -56,6 +88,7 @@ final class CodexConnection: CodexAccountConnection {
     private let loginTimeout: TimeInterval
     private let localIdentityOnly: Bool
     private var process: Process?
+    private var processUsesHelperGroup = false
     private var input: FileHandle?
     private var output: FileHandle?
     private var framer = CodexRPCFramer()
@@ -203,8 +236,9 @@ final class CodexConnection: CodexAccountConnection {
 
     deinit {
         output?.readabilityHandler = nil
+        if let process { Self.terminate(process, sharesHelperGroup: processUsesHelperGroup) }
         try? input?.close()
-        if process?.isRunning == true { process?.terminate() }
+        try? output?.close()
     }
 
     private struct EmptyResponse: Decodable {}
@@ -260,6 +294,12 @@ final class CodexConnection: CodexAccountConnection {
         child.executableURL = executableURL
         child.arguments = ["app-server", "--listen", "stdio://"]
         if !localIdentityOnly { child.arguments?.append(contentsOf: ["-c", "cli_auth_credentials_store=\"file\""]) }
+        processUsesHelperGroup = Self.workerLauncherURL != nil
+        if let launcher = Self.workerLauncherURL {
+            child.executableURL = launcher
+            child.arguments = ["--codex-worker", String(getpid()), String(getpgrp()), executableURL.path]
+                + (child.arguments ?? [])
+        }
         child.currentDirectoryURL = folder
         child.environment = Self.isolatedEnvironment(executableURL: executableURL, accountDirectory: folder)
         child.standardInput = stdin
@@ -389,17 +429,43 @@ final class CodexConnection: CodexAccountConnection {
         generation = UUID()
         initialized = false
         output?.readabilityHandler = nil
+        let child = process
+        let sharesHelperGroup = processUsesHelperGroup
+        process = nil
+        processUsesHelperGroup = false
+        child?.terminationHandler = nil
+        if let child { Self.terminate(child, sharesHelperGroup: sharesHelperGroup) }
         try? input?.close()
         try? output?.close()
         input = nil
         output = nil
-        let child = process
-        process = nil
-        child?.terminationHandler = nil
-        if child?.isRunning == true { child?.terminate() }
         for id in Array(requests.keys) { finishRequest(id, result: .failure(error)) }
         for id in Array(logins.keys) { finishLogin(id, result: .failure(error)) }
         loginOutcomes.removeAll()
+    }
+
+    private nonisolated static func terminate(_ child: Process, sharesHelperGroup: Bool) {
+        guard child.isRunning else { return }
+        let pid = child.processIdentifier
+        // Never signal the helper's entire group here: it also owns the other
+        // accounts. npm's Codex launcher forwards this signal to its child.
+        if sharesHelperGroup {
+            _ = kill(pid, SIGTERM)
+        } else if getpgid(pid) == pid {
+            _ = kill(-pid, SIGTERM)
+        } else {
+            _ = kill(pid, SIGTERM)
+        }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1) {
+            // Keep Process alive for reaping, and only escalate while that
+            // recorded process is still running.
+            guard child.isRunning else { return }
+            if !sharesHelperGroup, getpgid(pid) == pid {
+                _ = kill(-pid, SIGKILL)
+            } else {
+                _ = kill(pid, SIGKILL)
+            }
+        }
     }
 
     private static func nanoseconds(_ seconds: TimeInterval) -> UInt64 {

@@ -24,13 +24,13 @@ Native macOS app and desktop widgets for three Codex accounts. Shows remaining u
 
 If Codex is not detected, select its executable in Settings. If macOS blocks it, install a current official Codex CLI.
 
-Keep the app running for updates. It refreshes every three minutes; macOS controls widget refresh timing. Data becomes stale after ten minutes. Missing or expired limits remain unknown.
+A small background helper refreshes usage every three minutes, even after you quit the app. It starts when you log in and has no Dock or menu bar icon. If macOS asks, allow Codex Usage Viewer under **System Settings → General → Login Items & Extensions**. Settings shows whether the helper is connected. macOS controls widget refresh timing. Data becomes stale after ten minutes. Missing or expired limits remain unknown.
 
 Widget percentages show weekly usage remaining; bars and countdowns show time until reset. The computer icon identifies the default local Codex account. Subscription labels are Prolite → 100, Pro → 200, Promax → 500; other names are unchanged.
 
 ## Build and test
 
-Requires Xcode with the macOS SDK. Configure your signing identity, team, and App Group for both targets in `CodexUsageViewer.xcodeproj`.
+Requires Xcode with the macOS SDK. Configure your signing identity, team, and App Group for the app, background helper, and widget targets in `CodexUsageViewer.xcodeproj`.
 
 ```sh
 ./scripts/build.sh
@@ -62,5 +62,7 @@ The script creates an annotated numeric tag, builds for Apple silicon and Intel,
 ## Local data
 
 Each account stores credentials privately under `~/Library/Application Support/CodexUsageViewer/Accounts/account-{1,2,3}`. Never share or commit these files. Widgets receive account metadata and usage, without tokens. Chrome cookies are not read.
+
+The bundled launch agent owns the Codex connections and publishes widget snapshots. The app communicates with it over a signed XPC connection; quitting closes only the app connection. An in-progress browser sign-in can finish in the background. To notify WidgetKit after an update, the helper briefly invokes the app executable in a windowless mode that exits immediately after the request. To stop background updates, disable Codex Usage Viewer in Login Items & Extensions.
 
 The app reads limits through [Codex app-server](https://learn.chatgpt.com/docs/app-server#auth-endpoints), without inference requests. It checks the default `~/.codex` identity through read-only `account/read`; it does not change that login. Full names come from app-owned logins, with email fallback.

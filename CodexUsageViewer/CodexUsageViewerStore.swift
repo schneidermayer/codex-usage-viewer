@@ -3,7 +3,7 @@ import Combine
 import Foundation
 import WidgetKit
 
-struct PendingLogin: Identifiable {
+struct PendingLogin: Identifiable, Codable, Sendable {
     var id: String
     var accountName: String
     var authURL: URL?
@@ -45,12 +45,21 @@ final class CodexUsageViewerStore: ObservableObject {
     @Published var isDemo = false
     @Published var errorMessage: String?
     @Published var login: PendingLogin?
+    @Published private(set) var backgroundStatus = "Background updates are managed by macOS."
+    @Published private(set) var backgroundNeedsApproval = false
+    @Published private(set) var backgroundConnected = false
     @Published private(set) var localCodexEmail: String?
     @Published private(set) var localCodexStatus: String?
     @Published private(set) var localCodexCheckedAt: Date?
     @Published var codexPath: String {
         didSet {
+            guard !applyingBackgroundState else { return }
             preferences.set(codexPath, forKey: "codexExecutable")
+            if background != nil {
+                let path = codexPath
+                Task { await sendToBackground(.setExecutable(path: path)) }
+                return
+            }
             for connection in connections.values { connection.stop() }
             connections.removeAll()
             availableCodex = dependencies.locateExecutable(codexPath) != nil
@@ -63,11 +72,17 @@ final class CodexUsageViewerStore: ObservableObject {
     @Published private(set) var availableCodex: Bool
     @Published private(set) var chromeProfiles: [ChromeProfile]
     @Published private(set) var busyAccountIDs: Set<String> = []
-    @Published var launchAtLogin = false
     var openDashboardAction: (() -> Void)?
     private let dependencies: CodexUsageViewerStoreDependencies
     private let preferences: UserDefaults
     private let isUITesting: Bool
+    private let managesChromeProfiles: Bool
+    private let background: (any BackgroundServing)?
+    private let backgroundService: BackgroundServiceRegistration?
+    private var applyingBackgroundState = false
+    private var backgroundRequestID = 0
+    private var appliedBackgroundRequestID = 0
+    private var stopped = false
     private var connections: [String: any CodexAccountConnection] = [:]
     private var liveAccounts: [AccountSnapshot]
     private var pollTask: Task<Void, Never>?
@@ -109,30 +124,38 @@ final class CodexUsageViewerStore: ObservableObject {
         let profileID = selectedChromeProfileID
         guard chromeProfiles.contains(where: { $0.id == profileID }) else { return }
         let attempt = loginAttemptID
+        let accountID = login?.id
         Task {
             do { try await ChromeProfile.open(url, profileID: profileID) }
             catch {
-                guard loginAttemptID == attempt else { return }
+                guard loginAttemptID == attempt, login?.id == accountID, login?.authURL == url else { return }
                 login?.error = "Chrome couldn’t open this profile. You can still copy the sign-in link and open it yourself."
             }
         }
     }
 
     convenience init() {
+        let testing = ProcessInfo.processInfo.arguments.contains("--ui-testing")
         self.init(dependencies: .live, preferences: .standard, startsPolling: true,
-                  arguments: ProcessInfo.processInfo.arguments)
+                  arguments: ProcessInfo.processInfo.arguments,
+                  background: testing ? nil : BackgroundClient(), managesBackgroundService: !testing)
     }
 
     init(dependencies: CodexUsageViewerStoreDependencies, preferences: UserDefaults,
-         startsPolling: Bool = false, arguments: [String] = []) {
+         startsPolling: Bool = false, arguments: [String] = [],
+         background: (any BackgroundServing)? = nil, managesBackgroundService: Bool = false,
+         managesChromeProfiles: Bool = true) {
         self.dependencies = dependencies
         self.preferences = preferences
         isUITesting = arguments.contains("--ui-testing")
-        profileSelections = preferences.dictionary(forKey: "chromeProfiles") as? [String: String] ?? [:]
-        let discoveredProfiles = dependencies.discoverChromeProfiles()
+        self.managesChromeProfiles = managesChromeProfiles
+        self.background = isUITesting ? nil : background
+        backgroundService = managesBackgroundService && !isUITesting ? BackgroundServiceRegistration() : nil
+        profileSelections = managesChromeProfiles ? preferences.dictionary(forKey: "chromeProfiles") as? [String: String] ?? [:] : [:]
+        let discoveredProfiles = managesChromeProfiles ? dependencies.discoverChromeProfiles() : []
         chromeProfiles = discoveredProfiles
         profileSelections = profileSelections.filter { _, profileID in discoveredProfiles.contains(where: { $0.id == profileID }) }
-        preferences.set(profileSelections, forKey: "chromeProfiles")
+        if managesChromeProfiles { preferences.set(profileSelections, forKey: "chromeProfiles") }
         let path = preferences.string(forKey: "codexExecutable") ?? ""
         codexPath = path
         availableCodex = dependencies.locateExecutable(path) != nil
@@ -164,9 +187,15 @@ final class CodexUsageViewerStore: ObservableObject {
         updateLocalCodexMatchStatus()
         if startsPolling && !isUITesting {
             pollTask = Task { [weak self] in
+                await self?.backgroundService?.registerIfNeeded()
                 while !Task.isCancelled {
-                    await self?.refresh()
-                    do { try await Task.sleep(for: .seconds(CodexUsageViewerConstants.refreshInterval)) }
+                    if self?.background != nil {
+                        await self?.sendToBackground(.state)
+                    } else {
+                        await self?.refresh()
+                    }
+                    let interval = self?.background == nil ? CodexUsageViewerConstants.refreshInterval : 2
+                    do { try await Task.sleep(for: .seconds(interval)) }
                     catch { return }
                 }
             }
@@ -186,6 +215,7 @@ final class CodexUsageViewerStore: ObservableObject {
 
     func refresh() async {
         guard !isDemo, !isUITesting, !isRefreshing else { return }
+        if background != nil { await sendToBackground(.refresh); return }
         availableCodex = dependencies.locateExecutable(codexPath) != nil
         isRefreshing = true
         defer { isRefreshing = false }
@@ -282,9 +312,12 @@ final class CodexUsageViewerStore: ObservableObject {
 
     func connect(_ accountID: String) async {
         guard !isDemo, !isUITesting, login == nil, loginTask == nil, !busyAccountIDs.contains(accountID), !pendingDisconnectIDs.contains(accountID), let account = accounts.first(where: { $0.id == accountID }) else { return }
-        chromeProfiles = dependencies.discoverChromeProfiles()
-        profileSelections = profileSelections.filter { _, profileID in chromeProfiles.contains(where: { $0.id == profileID }) }
-        preferences.set(profileSelections, forKey: "chromeProfiles")
+        if managesChromeProfiles {
+            chromeProfiles = dependencies.discoverChromeProfiles()
+            profileSelections = profileSelections.filter { _, profileID in chromeProfiles.contains(where: { $0.id == profileID }) }
+            preferences.set(profileSelections, forKey: "chromeProfiles")
+        }
+        if background != nil { await sendToBackground(.connect(accountID: accountID)); return }
         let attempt = UUID()
         loginAttemptID = attempt
         login = PendingLogin(id: accountID, accountName: account.displayName, isWaiting: true)
@@ -324,6 +357,11 @@ final class CodexUsageViewerStore: ObservableObject {
     }
 
     func cancelLogin() async {
+        if background != nil {
+            guard login != nil else { return }
+            await sendToBackground(.cancelLogin)
+            return
+        }
         // Multiple dismissal callbacks may cancel; only the first owns cleanup.
         guard let accountID = login?.id else { return }
         let loginID = activeLoginID
@@ -351,6 +389,7 @@ final class CodexUsageViewerStore: ObservableObject {
 
     func disconnect(_ accountID: String) async {
         guard !isDemo, !isUITesting, let index = accounts.firstIndex(where: { $0.id == accountID }), !pendingDisconnectIDs.contains(accountID) else { return }
+        if background != nil { await sendToBackground(.disconnect(accountID: accountID)); return }
         pendingDisconnectIDs.insert(accountID)
         var ownsBusyState = false
         defer {
@@ -393,14 +432,75 @@ final class CodexUsageViewerStore: ObservableObject {
     }
 
     func shutdown() {
+        stopped = true
         pollTask?.cancel()
+        background?.shutdown()
         loginTask?.cancel()
         localLookupID = UUID()
         connections.values.forEach { $0.stop() }
     }
 
+    /// Only the helper publishes widget snapshots; the app never opens account workers.
+    func sendToBackground(_ command: BackgroundCommand) async {
+        guard !stopped, let background else { return }
+        if let service = backgroundService {
+            backgroundNeedsApproval = service.needsApproval
+            if let issue = service.issue {
+                backgroundConnected = false
+                backgroundStatus = issue
+                errorMessage = issue
+                return
+            }
+        }
+        backgroundRequestID += 1
+        let requestID = backgroundRequestID
+        do {
+            let state = try await background.send(command)
+            guard !stopped, requestID >= appliedBackgroundRequestID else { return }
+            appliedBackgroundRequestID = requestID
+            liveAccounts = state.snapshot.accounts
+            if !isDemo { accounts = liveAccounts }
+            localCodexEmail = state.snapshot.localCodexEmail
+            localCodexCheckedAt = state.snapshot.localCodexCheckedAt
+            localCodexStatus = state.localCodexStatus
+            isRefreshing = state.isRefreshing
+            busyAccountIDs = Set(state.busyAccountIDs)
+            login = state.login
+            availableCodex = state.availableCodex
+            errorMessage = state.errorMessage
+            applyingBackgroundState = true
+            codexPath = state.codexPath
+            applyingBackgroundState = false
+            backgroundStatus = "Active · updates continue after you quit the app."
+            backgroundNeedsApproval = false
+            backgroundConnected = true
+        } catch {
+            guard !stopped, requestID >= appliedBackgroundRequestID else { return }
+            appliedBackgroundRequestID = requestID
+            backgroundConnected = false
+            isRefreshing = false
+            backgroundStatus = "Background helper unavailable. Reopen the app or check Login Items in System Settings."
+            errorMessage = backgroundStatus
+        }
+    }
+
+    func retryBackgroundService() async {
+        await backgroundService?.registerIfNeeded()
+        await sendToBackground(.state)
+    }
+
+    var backgroundState: BackgroundState {
+        var snapshot = UsageSnapshot(accounts: accounts, savedAt: dependencies.now())
+        snapshot.localCodexEmail = localCodexEmail
+        snapshot.localCodexCheckedAt = localCodexCheckedAt
+        return BackgroundState(snapshot: snapshot, isRefreshing: isRefreshing,
+                               busyAccountIDs: Array(busyAccountIDs), login: login,
+                               availableCodex: availableCodex, localCodexStatus: localCodexStatus,
+                               errorMessage: errorMessage, codexPath: codexPath)
+    }
+
     private func persist() {
-        guard !isDemo, !isUITesting else { return }
+        guard !stopped, background == nil, !isDemo, !isUITesting else { return }
         liveAccounts = accounts
         do {
             var snapshot = UsageSnapshot(accounts: accounts, savedAt: dependencies.now())
