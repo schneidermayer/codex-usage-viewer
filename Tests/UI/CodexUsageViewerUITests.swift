@@ -89,6 +89,21 @@ final class CodexUsageViewerUITests: XCTestCase {
         XCTAssertTrue(plan.isHittable)
         XCTAssertTrue(badge.isHittable)
 
+        // Fixture cards expose both resources, including reported zeros.
+        for (index, expected) in [("125.5", "2"), ("0", "0"), ("Unlimited", "1")].enumerated() {
+            let credits = app.descendants(matching: .any).matching(identifier: "codexusageviewer.credits.account-\(index + 1)").firstMatch
+            let resets = app.descendants(matching: .any).matching(identifier: "codexusageviewer.availableResets.account-\(index + 1)").firstMatch
+            XCTAssertTrue(credits.isHittable)
+            XCTAssertTrue(resets.isHittable)
+            XCTAssertEqual(credits.label, "Available credits: \(expected.0)")
+            XCTAssertEqual(resets.label, "Available usage resets: \(expected.1)")
+        }
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Connected accounts with credits and available resets"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
         let options = app.descendants(matching: .any).matching(identifier: "codexusageviewer.options.account-1").firstMatch
         options.click()
         XCTAssertTrue(app.menuItems["All usage limits"].waitForExistence(timeout: 3))

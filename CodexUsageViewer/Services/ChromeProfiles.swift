@@ -36,7 +36,6 @@ struct ChromeProfile: Identifiable, Equatable, Sendable {
         value.range(of: #"\A(Default|Profile [0-9]+)\z"#, options: .regularExpression) != nil
     }
 
-    /// Routes sign-in to the selected Chrome profile.
     @MainActor
     static func open(_ url: URL, profileID: String) async throws {
         guard isValidDirectory(profileID), discover().contains(where: { $0.id == profileID }) else {

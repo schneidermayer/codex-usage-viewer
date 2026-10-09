@@ -107,6 +107,9 @@ enum WeeklyWidgetTimeline {
             if let resetAt = account.weeklyWindow?.resetDate, resetAt > now && resetAt < reloadAt {
                 dates.append(resetAt)
             }
+            if let expiry = account.resetCredits?.expiryDate, expiry > now && expiry < reloadAt {
+                dates.append(expiry)
+            }
         }
         return Set(dates).sorted()
     }

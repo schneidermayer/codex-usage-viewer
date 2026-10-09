@@ -69,7 +69,6 @@ enum BackgroundIPCError: LocalizedError, Equatable {
     }
 }
 
-/// Injectable connection boundary keeps unit tests away from launchd and real accounts.
 @MainActor
 protocol BackgroundIPCConnection: AnyObject {
     var onFailure: ((Error) -> Void)? { get set }
@@ -176,7 +175,7 @@ final class BackgroundClient: BackgroundServing {
         }
     }
 
-    /// Closes this app's IPC connection; the launch agent continues polling independently.
+    /// Disconnects the app; the helper continues polling.
     func shutdown() {
         stopped = true
         disconnect(with: BackgroundIPCError.stopped)

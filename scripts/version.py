@@ -36,7 +36,7 @@ def version_info(root=ROOT):
 def write_plist(plist_path, info, template=None):
     with (template or plist_path).open("rb") as handle:
         plist = plistlib.load(handle)
-    # Apple bundle versions stay numeric; all app-facing versions use display.
+    # Keep Apple's version fields numeric.
     plist["CFBundleShortVersionString"] = info["base"]
     plist["CFBundleVersion"] = info["build"]
     plist["CodexUsageViewerDisplayVersion"] = info["display"]

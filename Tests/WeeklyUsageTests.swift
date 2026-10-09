@@ -87,4 +87,15 @@ final class WeeklyUsageTests: XCTestCase {
         XCTAssertEqual(dates.map { Int($0.timeIntervalSince(now)) }, [0, 300, 400, 600, 601, 900])
         XCTAssertEqual(value.weeklyUsage(at: now.addingTimeInterval(400)), .resetElapsed)
     }
+
+    func testTimelineInvalidatesAvailableResetCountAtItsKnownExpiry() {
+        var value = account(primary: nil, secondary: weekly())
+        value.resetCredits = RateLimitResetCredits(availableCount: 4, earliestExpiresAt: 1_900_000_120)
+        let snapshot = UsageSnapshot(accounts: [value], savedAt: now)
+        let dates = WeeklyWidgetTimeline.dates(snapshot: snapshot, now: now, reloadAt: now.addingTimeInterval(180))
+        XCTAssertEqual(dates.map { Int($0.timeIntervalSince(now)) }, [0, 120, 180])
+        XCTAssertEqual(value.resetsValue(at: now.addingTimeInterval(119)), .amount("4"))
+        XCTAssertEqual(value.resetsValue(at: now.addingTimeInterval(120)), .unknown)
+        XCTAssertEqual(value.weeklyUsage(at: now.addingTimeInterval(120)).window, weekly())
+    }
 }

@@ -1,7 +1,6 @@
 import SwiftUI
 import WidgetKit
 
-/// Shared widget and fixture view.
 struct CodexUsageViewerWidgetContent: View {
     let snapshot: UsageSnapshot
     var family: WidgetFamily?
@@ -10,201 +9,194 @@ struct CodexUsageViewerWidgetContent: View {
     @Environment(\.widgetFamily) private var environmentFamily
     @Environment(\.widgetRenderingMode) private var renderingMode
 
-    private var effectiveFamily: WidgetFamily { family ?? environmentFamily }
+    private var isSmall: Bool { (family ?? environmentFamily) == .systemSmall }
     private var accounts: [AccountSnapshot] {
         CodexUsageViewerConstants.accountIDs.enumerated().map { index, id in
             snapshot.accounts.first(where: { $0.id == id })
                 ?? AccountSnapshot(id: id, name: "Account \(index + 1)")
         }
     }
-    private var isSmall: Bool { effectiveFamily == .systemSmall }
-    private var isLarge: Bool { effectiveFamily == .systemLarge }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: isLarge ? 14 : 9) {
-            if isLarge {
+        GeometryReader { geometry in
+            let spacing: CGFloat = isSmall ? 4 : 12
+            let columnWidth = max(0, (geometry.size.width - 2 * spacing) / 3)
+            HStack(spacing: spacing) {
                 ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
-                    if index > 0 { Divider().opacity(0.5) }
-                    Link(destination: accountURL(account)) {
-                        largeAccount(account, index: index)
-                    }
-                    .buttonStyle(.plain)
-                    .frame(maxHeight: .infinity)
-                }
-            } else {
-                ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
-                    if isSmall {
-                        compactAccount(account, index: index)
-                    } else {
-                        Link(destination: accountURL(account)) {
-                            compactAccount(account, index: index)
+                    Group {
+                        if isSmall {
+                            accountColumn(account, index: index)
+                        } else {
+                            Link(destination: accountURL(account)) {
+                                accountColumn(account, index: index)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
+                    .frame(width: columnWidth, height: geometry.size.height)
                 }
             }
         }
         .fontDesign(.rounded)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Codex weekly usage and time until reset")
+        .accessibilityLabel("Codex weekly usage, credits, available resets, and time until reset")
     }
 
-    private func compactAccount(_ account: AccountSnapshot, index: Int) -> some View {
+    private func accountColumn(_ account: AccountSnapshot, index: Int) -> some View {
+        let color = accent(index)
         let state = account.weeklyUsage(at: referenceDate)
         let reset = state.window.flatMap { WeeklyResetProgress(window: $0, at: referenceDate) }
-        let subscription = account.subscriptionDisplayName ?? "Unknown plan"
-        let resetDescription = reset.map { "Reset in \($0.countdown), out of seven days" } ?? "Reset time not reported"
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: isSmall ? 4 : 6) {
-                accountIndicator(account, index: index)
-                Text(account.displayName)
-                    .font(.system(size: 11, weight: .semibold))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer(minLength: 2)
-                if let window = state.window {
-                    Text("\(window.remainingPercent)%")
-                        .font(.system(size: isSmall ? 11 : 12, weight: .semibold))
-                        .monospacedDigit()
-                        .fixedSize()
-                        .accessibilityLabel("\(window.remainingPercent) percent weekly usage remaining")
-                } else {
-                    Text("—")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
+        return VStack(spacing: 0) {
+            HStack(spacing: 2) {
+                if snapshot.isLocalAccount(account, at: referenceDate) {
+                    Image(systemName: "desktopcomputer")
+                        .font(.system(size: isSmall ? 7 : 10, weight: .semibold))
+                        .foregroundStyle(color)
+                        .widgetAccentable()
+                        .accessibilityLabel("Logged In")
                 }
-            }
-            if let window = state.window {
-                HStack(spacing: isSmall ? 5 : 9) {
-                    Text(subscription)
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .layoutPriority(1)
-                    resetTrack(reset, color: accent(index), height: isSmall ? 3 : 4)
-                        .frame(minWidth: isSmall ? 30 : 50)
-                    HStack(spacing: 2) {
-                        if isSmall {
-                            Image(systemName: "clock")
-                                .font(.system(size: 7))
-                                .accessibilityHidden(true)
-                        }
-                        Text(reset?.countdown ?? "Unknown")
-                            .font(.system(size: isSmall ? 8 : 10, weight: .medium))
-                            .monospacedDigit()
-                    }
-                    .foregroundStyle(.secondary)
-                    .fixedSize()
-                }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(subscription) subscription. \(resetDescription)")
-                .accessibilityValue("\(window.remainingPercent) percent weekly usage remaining")
-            } else {
-                Text(state.status ?? "Usage unknown")
-                    .font(.system(size: isSmall ? 8 : 10))
-                    .foregroundStyle(.secondary)
+                Text(widgetName(account))
+                    .font(.system(size: isSmall ? 10 : 13, weight: .semibold))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                    .padding(.leading, isSmall ? 14 : 18)
+                    .minimumScaleFactor(0.8)
+                    .accessibilityLabel(account.displayName)
+                    .help(account.displayName)
             }
-        }
-        .frame(maxHeight: .infinity)
-        .accessibilityElement(children: .combine)
-    }
+            .frame(height: 16)
 
-    private func largeAccount(_ account: AccountSnapshot, index: Int) -> some View {
-        let state = account.weeklyUsage(at: referenceDate)
-        let reset = state.window.flatMap { WeeklyResetProgress(window: $0, at: referenceDate) }
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 7) {
-                accountIndicator(account, index: index)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(account.displayName)
-                        .font(.system(size: 13, weight: .semibold))
-                        .lineLimit(1)
-                    if let subscription = account.subscriptionDisplayName {
-                        Text(subscription)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .accessibilityLabel("Subscription plan: \(subscription)")
-                    }
-                }
-                Spacer(minLength: 4)
-                if let window = state.window {
-                    Text("\(window.remainingPercent)%")
-                        .font(.system(size: 27, weight: .light))
-                        .monospacedDigit()
-                        .fixedSize()
-                        .accessibilityLabel("\(window.remainingPercent) percent weekly usage remaining")
-                } else {
-                    Text("—")
-                        .font(.system(size: 27, weight: .light))
-                        .foregroundStyle(.tertiary)
+            HStack(alignment: .firstTextBaseline, spacing: 0) {
+                Text(state.window.map { String($0.remainingPercent) } ?? "—")
+                    .font(.system(size: isSmall ? 19.5 : 31, weight: .semibold))
+                    .monospacedDigit()
+                if state.window != nil {
+                    Text("%")
+                        .font(.system(size: isSmall ? 9 : 13, weight: .medium))
                 }
             }
+            .foregroundStyle(state.window == nil ? Color.secondary : color)
+            .widgetAccentable()
+            .fixedSize()
+            .frame(height: isSmall ? 30 : 36)
+            .padding(.top, 2)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(state.window.map { "\($0.remainingPercent) percent weekly usage remaining" } ?? "Weekly usage unknown")
+
+            Spacer(minLength: 3)
+
+            Text(account.subscriptionDisplayName ?? "—")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .background(color.opacity(0.13), in: Capsule())
+                .frame(height: 14)
+                .accessibilityLabel("Subscription plan: \(account.subscriptionDisplayName ?? "Unknown plan")")
+                .help("Subscription plan: \(account.subscriptionDisplayName ?? "Unknown plan")")
+
             if state.window != nil {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(reset == nil ? "Reset time not reported" : "Time until reset")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 4)
-                    Text(reset?.countdown ?? "—")
-                        .font(.system(size: 13, weight: .semibold))
-                        .monospacedDigit()
-                }
-                VStack(spacing: 4) {
-                    resetTrack(reset, color: accent(index), height: 5)
-                    HStack {
-                        Text("0")
-                        Spacer()
-                        Text("7 days")
-                    }
-                    .font(.system(size: 8))
-                    .foregroundStyle(.tertiary)
-                    .accessibilityHidden(true)
-                }
-                .accessibilityLabel(reset.map { "\(Int(($0.fractionRemaining * 100).rounded())) percent of seven days until reset" } ?? "Reset time unknown")
+                CodexUsageViewerResetTrack(fractionRemaining: reset?.fractionRemaining,
+                                          accent: color, height: 4, spacing: isSmall ? 1 : 3,
+                                          widgetAccentable: true)
+                    .padding(.top, 5)
+                Text(reset?.countdown ?? "—")
+                    .font(.system(size: isSmall ? 9 : 11, weight: .medium))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .frame(height: 14)
+                    .padding(.top, 3)
+                    .accessibilityLabel(reset.map { "Reset in \($0.countdown), out of seven days" } ?? "Reset time not reported")
+                    .help(reset.map { "Reset in \($0.countdown), out of seven days" } ?? "Reset time not reported")
             } else {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(state.status ?? "Usage unknown")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
-                    if account.isConnected, let updatedAt = account.updatedAt, state != .notReported {
-                        Text(CodexUsageViewerFormatting.updated(updatedAt, now: referenceDate))
-                            .font(.system(size: 9))
-                            .foregroundStyle(.tertiary)
-                    }
+                Text(compactStatus(state))
+                    .font(.system(size: isSmall ? 9 : 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+                    .frame(height: 26)
+                    .accessibilityLabel(state.status ?? "Usage unknown")
+                    .help(state.status ?? "Usage unknown")
+            }
+
+            Spacer(minLength: 5)
+
+            if isSmall {
+                VStack(spacing: 3) {
+                    credits(account)
+                    availableResets(account)
                 }
+            } else {
+                HStack(spacing: 3) {
+                    credits(account)
+                    Spacer(minLength: 0)
+                    availableResets(account)
+                }
+                .frame(height: 17)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }
 
-    /// Seven day segments encode time remaining.
-    private func resetTrack(_ progress: WeeklyResetProgress?, color: Color, height: CGFloat) -> some View {
-        CodexUsageViewerResetTrack(fractionRemaining: progress?.fractionRemaining, accent: color,
-                                  height: height, spacing: isSmall ? 2 : 3, widgetAccentable: true)
+    private func credits(_ account: AccountSnapshot) -> some View {
+        resource(account.creditsValue(at: referenceDate), symbol: "c.circle", alignment: .leading,
+                 label: "Available credits", help: "Credits available for additional usage")
     }
 
-    private func accountIndicator(_ account: AccountSnapshot, index: Int) -> some View {
-        Group {
-            if snapshot.isLocalAccount(account, at: referenceDate) {
-                Image(systemName: "desktopcomputer")
-                    .font(.system(size: isSmall ? 9 : (isLarge ? 12 : 10), weight: .medium))
-                    .foregroundStyle(accent(index))
-                    .widgetAccentable()
-                    .accessibilityLabel("Logged In")
-            } else {
-                Circle().fill(accent(index))
-                    .frame(width: isSmall ? 4 : (isLarge ? 6 : 5), height: isSmall ? 4 : (isLarge ? 6 : 5))
-                    .widgetAccentable()
-                    .accessibilityHidden(true)
-            }
+    private func availableResets(_ account: AccountSnapshot) -> some View {
+        resource(account.resetsValue(at: referenceDate), symbol: "arrow.counterclockwise", alignment: isSmall ? .center : .trailing,
+                 label: "Available usage resets", help: "Earned usage resets available to use")
+    }
+
+    private func resource(_ value: AccountResourceValue, symbol: String, alignment: Alignment,
+                          label: String, help: String) -> some View {
+        HStack(spacing: 2) {
+            Image(systemName: symbol)
+                .font(.system(size: isSmall ? 9 : 10, weight: .medium))
+                .accessibilityHidden(true)
+            Text(compactResourceText(value))
+                .font(.system(size: isSmall ? 9 : 11, weight: .medium))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
-        .frame(width: isSmall ? 10 : (isLarge ? 14 : 12))
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity, alignment: alignment)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(label): \(value.accessibilityText)")
+        .help("\(help): \(value.accessibilityText)")
+    }
+
+    private func widgetName(_ account: AccountSnapshot) -> String {
+        // Shorten only the verified profile name; preserve official email and slot fallbacks.
+        account.fullName?.split(whereSeparator: { $0.isWhitespace }).first.map(String.init)
+            ?? account.displayName
+    }
+
+    private func compactResourceText(_ value: AccountResourceValue) -> String {
+        let text = value.compactText
+        // Keep scientific values readable in a column: 1.0E+030 becomes 1e30.
+        let parts = text.split(separator: "E")
+        guard parts.count == 2, let exponent = Int(parts[1]) else { return text }
+        let mantissa = parts[0].hasSuffix(".0") ? String(parts[0].dropLast(2)) : String(parts[0])
+        return "\(mantissa)e\(exponent)"
+    }
+
+    private func compactStatus(_ state: WeeklyUsageState) -> String {
+        switch state {
+        case .disconnected: return "Connect\nin app"
+        case .needsSignIn: return "Sign in\nagain"
+        case .waiting: return "Waiting\nfor usage"
+        case .stale: return "Out of\ndate"
+        case .unavailable: return "Update\nunavailable"
+        case .notReported: return "Not\nreported"
+        case .resetElapsed: return "Refresh\nto check"
+        case .available: return "—"
+        }
     }
 
     private func accent(_ index: Int) -> Color {

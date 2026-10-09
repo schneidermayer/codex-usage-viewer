@@ -39,7 +39,7 @@ def main():
         if git(ROOT, 'rev-parse', f'{args.version}^{{commit}}') != git(ROOT, 'rev-parse', 'HEAD'):
             parser.error('release tag already points to a different commit')
     else:
-        # The tag precedes the build so releases display the bare version.
+        # Tag first so the build displays the release version.
         run('git', 'tag', '-a', args.version, '-m', f'Release {args.version}')
     run('python3', 'scripts/test_version.py')
     run('swift', 'test')

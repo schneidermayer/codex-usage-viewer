@@ -2,7 +2,6 @@ import CryptoKit
 import Foundation
 import ServiceManagement
 
-/// Register the bundled agent once, and replace its registration when its binary changes.
 @MainActor
 final class BackgroundServiceRegistration {
     private let service = SMAppService.agent(plistName: "com.inndevs.codexusageviewer.helper.plist")

@@ -25,7 +25,7 @@ struct CodexUsageViewerStoreDependencies {
 
     static var live: Self {
         Self(loadSnapshot: SharedSnapshotStore.load, saveSnapshot: SharedSnapshotStore.save,
-             reloadWidgets: { WidgetCenter.shared.reloadTimelines(ofKind: CodexUsageViewerConstants.widgetKind) },
+             reloadWidgets: { WidgetCenter.shared.reloadAllTimelines() },
              locateExecutable: CodexConnection.locateExecutable,
              makeConnection: { CodexConnection(accountID: $0, executableURL: $1) },
              credentialExists: { id in
@@ -288,12 +288,14 @@ final class CodexUsageViewerStore: ObservableObject {
             guard let identity = try await worker.account(), identity.type == "chatgpt" else {
                 accounts[index].state = .needsSignIn
                 accounts[index].buckets = []
+                accounts[index].resetCredits = nil
                 accounts[index].updatedAt = nil
                 accounts[index].issue = "Sign in to reconnect this account."
                 return
             }
             if accounts[index].email != identity.email || accounts[index].plan != identity.planType {
                 accounts[index].buckets = []
+                accounts[index].resetCredits = nil
                 accounts[index].updatedAt = nil
             }
             accounts[index].email = identity.email
@@ -302,6 +304,7 @@ final class CodexUsageViewerStore: ObservableObject {
             accounts[index].state = .connected
             let limits = try await worker.readLimits()
             accounts[index].buckets = limits.buckets
+            accounts[index].resetCredits = limits.rateLimitResetCredits
             accounts[index].updatedAt = dependencies.now()
             accounts[index].issue = nil
         } catch {

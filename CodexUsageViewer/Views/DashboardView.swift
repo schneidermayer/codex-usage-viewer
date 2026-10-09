@@ -234,7 +234,7 @@ private struct AccountCard: View {
                 }
             }
             .padding(20)
-            .frame(height: 425, alignment: .top)
+            .frame(height: 475, alignment: .top)
             .frame(maxWidth: .infinity)
             .background {
                 RoundedRectangle(cornerRadius: 22)
@@ -390,6 +390,8 @@ private struct AccountCard: View {
                 }
                 .frame(maxWidth: .infinity, minHeight: 233)
             }
+            AccountResourcesView(account: account, now: now)
+                .padding(.top, 16)
             Spacer(minLength: 12)
             HStack(spacing: 4) {
                 if account.issue != nil || account.isStale(at: now) || hasElapsedWindow(now: now) {
@@ -506,6 +508,42 @@ struct LocalCodexBadge: View {
     }
 }
 
+private struct AccountResourcesView: View {
+    let account: AccountSnapshot
+    let now: Date
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 16) {
+            resource("Credits", symbol: "c.circle", value: account.creditsValue(at: now), key: "credits",
+                     description: "Available credit balance reported by this account.")
+            resource("Usage resets", symbol: "arrow.counterclockwise", value: account.resetsValue(at: now), key: "availableResets",
+                     description: "Earned usage resets available to use. Separate from the automatic reset countdowns.")
+        }
+        .padding(.top, 12)
+        .overlay(alignment: .top) { Divider().opacity(0.6) }
+    }
+
+    private func resource(_ title: String, symbol: String, value: AccountResourceValue,
+                          key: String, description: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Label(title, systemImage: symbol)
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Text(value.text)
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .help("\(description) \(value.accessibilityText)")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Available \(title.lowercased()): \(value.accessibilityText)")
+        .accessibilityIdentifier("codexusageviewer.\(key).\(account.id)")
+    }
+}
+
 private struct AccountLimitsSheet: View {
     let account: AccountSnapshot
     let isDemo: Bool
@@ -546,6 +584,8 @@ private struct AccountLimitsSheet: View {
                         .font(.system(size: 11))
                         .foregroundStyle(CodexUsageViewerPalette.lilac)
                 }
+
+                AccountResourcesView(account: account, now: context.date)
 
                 if let warning = historicalWarning(now: context.date) {
                     Label(warning, systemImage: "clock.badge.exclamationmark")

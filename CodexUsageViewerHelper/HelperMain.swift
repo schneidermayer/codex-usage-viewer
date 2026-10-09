@@ -68,8 +68,7 @@ private final class HelperListener: NSObject, NSXPCListenerDelegate {
 enum CodexUsageViewerHelperMain {
     @MainActor static func main() {
         CodexConnection.runWorkerIfRequested()
-        // launchd may pass a bundle-relative argv[0] while the working directory
-        // is /. Ask the kernel for the running image instead of resolving argv.
+        // launchd may supply a relative argv[0] from /; ask the kernel for the executable path.
         var executablePath = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
         guard proc_pidpath(getpid(), &executablePath, UInt32(executablePath.count)) > 0 else { exit(EXIT_FAILURE) }
         let helperURL = URL(fileURLWithPath: String(cString: executablePath))
@@ -104,8 +103,7 @@ enum CodexUsageViewerHelperMain {
     }
 }
 
-/// WidgetKit resolves the containing app from the caller's executable identity.
-/// A brief UI-free invocation of that executable requests the widget reload.
+/// WidgetKit requires reloads from the app executable; invoke its UI-free entry point.
 @MainActor
 private final class WidgetReloadProcess {
     private let executable: URL

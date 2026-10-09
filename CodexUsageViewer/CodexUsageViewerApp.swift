@@ -6,10 +6,8 @@ import WidgetKit
 enum CodexUsageViewerMain {
     @MainActor static func main() {
         if CommandLine.arguments.contains("--reload-widgets") {
-            // WidgetKit associates reloads with this executable's containing app.
-            // Do not initialize SwiftUI/NSApplication: this process has no UI,
-            // Dock presence, account connections, or background registration.
-            WidgetCenter.shared.reloadTimelines(ofKind: CodexUsageViewerConstants.widgetKind)
+            // WidgetKit requires the app executable; reload without starting SwiftUI or workers.
+            WidgetCenter.shared.reloadAllTimelines()
             WidgetCenter.shared.getCurrentConfigurations { _ in exit(EXIT_SUCCESS) }
             RunLoop.main.run(until: Date.now.addingTimeInterval(5))
             return

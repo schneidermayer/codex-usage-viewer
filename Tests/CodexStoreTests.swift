@@ -79,7 +79,7 @@ final class CodexStoreTests: XCTestCase {
             if connected {
                 accounts[0] = AccountSnapshot(id: "account-1", name: "My personal account", email: "old@fixture.test", plan: "plus",
                                               state: .connected, buckets: [StoreConnectionFixture.limits.rateLimits],
-                                              updatedAt: now.addingTimeInterval(-1_000))
+                                              updatedAt: now.addingTimeInterval(-1_000), resetCredits: RateLimitResetCredits(availableCount: 3))
             }
             cached = UsageSnapshot(accounts: accounts, savedAt: now.addingTimeInterval(-1_000))
             let dependencies = CodexUsageViewerStoreDependencies(
@@ -120,6 +120,7 @@ final class CodexStoreTests: XCTestCase {
         XCTAssertEqual(account.email, "current@fixture.test")
         XCTAssertEqual(account.plan, "pro")
         XCTAssertTrue(account.buckets.isEmpty)
+        XCTAssertNil(account.resetCredits)
         XCTAssertNil(account.updatedAt)
         XCTAssertNotNil(account.issue)
         XCTAssertEqual(harness.saved.last?.accounts[0], account)
@@ -135,6 +136,7 @@ final class CodexStoreTests: XCTestCase {
         XCTAssertEqual(account.name, "My personal account")
         XCTAssertNil(account.email)
         XCTAssertTrue(account.buckets.isEmpty)
+        XCTAssertNil(account.resetCredits)
         XCTAssertNil(account.updatedAt)
         XCTAssertEqual(account.state, .needsSignIn)
         XCTAssertNotNil(harness.store.login?.error)
@@ -148,6 +150,8 @@ final class CodexStoreTests: XCTestCase {
         harness.worker.limitsHandler = { throw StoreFixtureError.offline }
         await harness.store.refresh()
         XCTAssertEqual(harness.store.accounts[0].buckets, harness.cached.accounts[0].buckets)
+        XCTAssertEqual(harness.store.accounts[0].resetCredits, harness.cached.accounts[0].resetCredits)
+        XCTAssertEqual(harness.store.accounts[0].resetsValue(at: harness.now), .unknown)
         XCTAssertEqual(harness.store.accounts[0].updatedAt, harness.cached.accounts[0].updatedAt)
         XCTAssertNotNil(harness.store.accounts[0].issue)
     }
@@ -159,8 +163,28 @@ final class CodexStoreTests: XCTestCase {
         await harness.store.refresh()
         XCTAssertEqual(harness.store.accounts[0].state, .needsSignIn)
         XCTAssertTrue(harness.store.accounts[0].buckets.isEmpty)
+        XCTAssertNil(harness.store.accounts[0].resetCredits)
         XCTAssertNil(harness.store.accounts[0].updatedAt)
         XCTAssertEqual(harness.worker.limitsCalls, 0)
+    }
+
+    func testRefreshPublishesResetSummaryAndClearsItWhenLaterResponseOmitsIt() async {
+        let harness = Harness()
+        defer { harness.finish() }
+        var response = StoreConnectionFixture.limits
+        response.rateLimitResetCredits = RateLimitResetCredits(availableCount: 2, earliestExpiresAt: 1_900_000_000)
+        response.rateLimits.credits = CreditBalance(hasCredits: true, unlimited: false, balance: "45.25")
+        harness.worker.limitsHandler = { response }
+        await harness.store.refresh()
+        XCTAssertEqual(harness.store.accounts[0].resetsValue(at: harness.now), .amount("2"))
+        XCTAssertEqual(harness.saved.last?.accounts[0].resetCredits, response.rateLimitResetCredits)
+        XCTAssertEqual(harness.saved.last?.accounts[0].creditsValue(at: harness.now), .amount("45.25"))
+        response.rateLimitResetCredits = nil
+        response.rateLimits.credits = nil
+        await harness.store.refresh()
+        XCTAssertNil(harness.store.accounts[0].resetCredits)
+        XCTAssertEqual(harness.store.accounts[0].resetsValue(at: harness.now), .unknown)
+        XCTAssertEqual(harness.store.accounts[0].creditsValue(at: harness.now), .unknown)
     }
 
     func testDisconnectWaitsForRefreshAndCannotBeOverwrittenByItsResult() async {

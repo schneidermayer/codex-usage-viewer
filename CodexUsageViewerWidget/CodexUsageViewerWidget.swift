@@ -26,27 +26,53 @@ struct CodexUsageViewerUsageProvider: TimelineProvider {
 }
 
 @main
-struct CodexUsageViewerUsageWidget: Widget {
-    var body: some WidgetConfiguration {
-        StaticConfiguration(kind: CodexUsageViewerConstants.widgetKind, provider: CodexUsageViewerUsageProvider()) { entry in
-            CodexUsageViewerWidgetContent(snapshot: entry.snapshot, family: nil, referenceDate: entry.date)
-                .containerBackground(for: .widget) { Color.clear }
-                .widgetURL(URL(string: "codexusageviewer://dashboard"))
-        }
-        .configurationDisplayName("Codex Usage Viewer")
-        .description("Weekly usage and time until reset for your three Codex accounts.")
-        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+struct CodexUsageViewerWidgetBundle: WidgetBundle {
+    var body: some Widget {
+        CodexUsageViewerSmallWidget()
+        CodexUsageViewerUsageWidget()
     }
 }
 
-#Preview("Three accounts", as: .systemMedium) {
-    CodexUsageViewerUsageWidget()
+enum CodexUsageViewerWidgetSize {
+    case small, large
+
+    var name: String { self == .small ? "Small" : "Large" }
+    var kind: String {
+        self == .small ? CodexUsageViewerConstants.smallWidgetKind : CodexUsageViewerConstants.widgetKind
+    }
+    // Large uses WidgetKit's wide systemMedium family.
+    var family: WidgetFamily { self == .small ? .systemSmall : .systemMedium }
+}
+
+struct CodexUsageViewerUsageWidget: Widget {
+    var body: some WidgetConfiguration { usageConfiguration(size: .large) }
+}
+
+struct CodexUsageViewerSmallWidget: Widget {
+    var body: some WidgetConfiguration { usageConfiguration(size: .small) }
+}
+
+@MainActor
+private func usageConfiguration(size: CodexUsageViewerWidgetSize) -> some WidgetConfiguration {
+    StaticConfiguration(kind: size.kind, provider: CodexUsageViewerUsageProvider()) { entry in
+        CodexUsageViewerWidgetContent(snapshot: entry.snapshot, family: nil, referenceDate: entry.date)
+            .containerBackground(for: .widget) { Color.clear }
+            .widgetURL(URL(string: "codexusageviewer://dashboard"))
+    }
+    .configurationDisplayName(size.name)
+    .description("Weekly usage, credits, available resets, and reset countdowns for your three Codex accounts.")
+    .supportedFamilies([size.family])
+}
+
+#Preview("Small", as: .systemSmall) {
+    CodexUsageViewerSmallWidget()
 } timeline: {
     CodexUsageViewerUsageEntry(date: .now, snapshot: .preview)
 }
 
-#Preview("Connect accounts", as: .systemLarge) {
+#Preview("Large", as: .systemMedium) {
     CodexUsageViewerUsageWidget()
 } timeline: {
+    CodexUsageViewerUsageEntry(date: .now, snapshot: .preview)
     CodexUsageViewerUsageEntry(date: .now, snapshot: .empty)
 }

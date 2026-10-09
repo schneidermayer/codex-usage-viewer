@@ -1,7 +1,9 @@
 import Foundation
 
 enum CodexUsageViewerConstants {
+    // Keep this kind stable for installed wide widgets.
     static let widgetKind = "CodexUsageViewerUsageWidget"
+    static let smallWidgetKind = "CodexUsageViewerSmallWidget"
     static var appGroup: String {
         Bundle.main.object(forInfoDictionaryKey: "CodexUsageViewerAppGroup") as? String ?? "AW7ZNT442J.com.inndevs.codexusageviewer"
     }
@@ -45,6 +47,102 @@ struct CreditBalance: Codable, Equatable, Sendable {
     var balance: String?
 }
 
+/// Widget-safe summary; excludes redemption IDs.
+struct RateLimitResetCredits: Codable, Equatable, Sendable {
+    var availableCount: Int?
+    var earliestExpiresAt: Int?
+
+    init(availableCount: Int?, earliestExpiresAt: Int? = nil) {
+        self.availableCount = availableCount
+        self.earliestExpiresAt = earliestExpiresAt
+    }
+
+    var expiryDate: Date? { earliestExpiresAt.map { Date(timeIntervalSince1970: Double($0)) } }
+
+    private enum CodingKeys: String, CodingKey { case availableCount, earliestExpiresAt, credits }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        availableCount = try values.decodeIfPresent(Int.self, forKey: .availableCount)
+        earliestExpiresAt = try values.decodeIfPresent(Int.self, forKey: .earliestExpiresAt)
+        struct Detail: Decodable {
+            var status: String?
+            var expiresAt: Int?
+        }
+        if let details = try values.decodeIfPresent([Detail].self, forKey: .credits) {
+            let expiry = details.filter { $0.status == "available" }.compactMap(\.expiresAt).min()
+            earliestExpiresAt = [earliestExpiresAt, expiry].compactMap { $0 }.min()
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encodeIfPresent(availableCount, forKey: .availableCount)
+        try values.encodeIfPresent(earliestExpiresAt, forKey: .earliestExpiresAt)
+    }
+}
+
+enum AccountResourceValue: Equatable, Sendable {
+    case unknown, amount(String), available, unlimited
+
+    var text: String {
+        switch self {
+        case .unknown: return "Unknown"
+        case .amount(let value): return Self.decimal(value).map(Self.decimalText) ?? value
+        case .available: return "Available"
+        case .unlimited: return "Unlimited"
+        }
+    }
+
+    var compactText: String {
+        switch self {
+        case .unknown: return "—"
+        case .available: return "Yes"
+        case .unlimited: return "∞"
+        case .amount(let value): return Self.compactAmount(value)
+        }
+    }
+
+    var accessibilityText: String { text }
+
+    fileprivate static func decimal(_ value: String) -> Decimal? {
+        // Decimal accepts numeric prefixes; validate the whole string first.
+        guard value.count <= 256,
+              value.range(of: #"^[+]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$"#, options: .regularExpression) != nil,
+              let number = Decimal(string: value, locale: Locale(identifier: "en_US_POSIX")),
+              !number.isNaN, number >= 0 else { return nil }
+        return number
+    }
+
+    private static func compactAmount(_ value: String) -> String {
+        guard let number = decimal(value) else { return value }
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.numberStyle = .decimal
+        formatter.usesGroupingSeparator = false
+        formatter.roundingMode = .down
+        formatter.maximumFractionDigits = 1
+        for (threshold, suffix) in [(Decimal(1_000_000_000_000), "T"), (Decimal(1_000_000_000), "B"), (Decimal(1_000_000), "M"), (Decimal(1_000), "K")] {
+            if number >= threshold {
+                if number >= Decimal(1_000_000_000_000_000) {
+                    formatter.numberStyle = .scientific
+                    return formatter.string(from: NSDecimalNumber(decimal: number)) ?? value
+                }
+                return (formatter.string(from: NSDecimalNumber(decimal: number / threshold)) ?? value) + suffix
+            }
+        }
+        return decimalText(number)
+    }
+
+    private static func decimalText(_ number: Decimal) -> String {
+        if number > 0, number < Decimal(string: "0.01")! { return "<0.01" }
+        var original = number
+        var rounded = Decimal()
+        NSDecimalRound(&rounded, &original, 2, .down)
+        return NSDecimalNumber(decimal: rounded).stringValue
+    }
+}
+
 struct UsageBucket: Codable, Equatable, Identifiable, Sendable {
     var limitId: String?
     var limitName: String?
@@ -62,14 +160,20 @@ struct RateLimitsResponse: Codable, Sendable {
     var rateLimitsByLimitId: [String: UsageBucket]?
     var accountId: String?
     var ordinaryUsageAllowed: Bool?
+    var rateLimitResetCredits: RateLimitResetCredits?
 
     var buckets: [UsageBucket] {
         guard let all = rateLimitsByLimitId, !all.isEmpty else { return [rateLimits] }
-        return all.map { key, value in
+        var buckets = all.map { key, value in
             var bucket = value
             if bucket.limitId == nil { bucket.limitId = key }
+            if bucket.id == rateLimits.id, bucket.credits == nil { bucket.credits = rateLimits.credits }
             return bucket
-        }.sorted { lhs, rhs in
+        }
+        if rateLimits.credits != nil, !buckets.contains(where: { $0.id == rateLimits.id }) {
+            buckets.append(rateLimits)
+        }
+        return buckets.sorted { lhs, rhs in
             if lhs.id == "codex" { return rhs.id != "codex" }
             if rhs.id == "codex" { return false }
             return lhs.id < rhs.id
@@ -91,6 +195,7 @@ struct AccountSnapshot: Codable, Equatable, Identifiable, Sendable {
     var updatedAt: Date?
     var issue: String?
     var fullName: String? = nil
+    var resetCredits: RateLimitResetCredits? = nil
 
     // Legacy slot labels remain decodable but are never used as account names.
     var displayName: String {
@@ -113,6 +218,24 @@ struct AccountSnapshot: Codable, Equatable, Identifiable, Sendable {
 
     var primaryBucket: UsageBucket? { buckets.first(where: { $0.id == "codex" }) ?? buckets.first }
     var isConnected: Bool { state == .connected }
+
+    func creditsValue(at date: Date = .now) -> AccountResourceValue {
+        guard isConnected, issue == nil, !isStale(at: date), let credits = primaryBucket?.credits else { return .unknown }
+        if credits.unlimited { return .unlimited }
+        if !credits.hasCredits { return .amount("0") }
+        guard let rawBalance = credits.balance else { return .available }
+        let value = rawBalance.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let balance = AccountResourceValue.decimal(value) else { return .unknown }
+        return .amount(NSDecimalNumber(decimal: balance).stringValue)
+    }
+
+    func resetsValue(at date: Date = .now) -> AccountResourceValue {
+        guard isConnected, issue == nil, !isStale(at: date),
+              let resets = resetCredits, let count = resets.availableCount, count >= 0 else { return .unknown }
+        if let expiry = resets.expiryDate, expiry <= date { return .unknown }
+        return .amount(String(count))
+    }
+
     func isStale(at date: Date = .now) -> Bool {
         guard let updatedAt else { return true }
         let age = date.timeIntervalSince(updatedAt)
@@ -152,6 +275,8 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
             accounts[index].state = .connected
             accounts[index].updatedAt = now
             accounts[index].buckets = [UsageBucket(limitId: "codex", primary: QuotaWindow(usedPercent: [28, 64, 12][index], windowDurationMins: 300, resetsAt: Int(now.timeIntervalSince1970) + [7_620, 3_240, 12_600][index]), secondary: QuotaWindow(usedPercent: [42, 79, 23][index], windowDurationMins: 10_080, resetsAt: Int(now.timeIntervalSince1970) + 172_800))]
+            accounts[index].buckets[0].credits = [CreditBalance(hasCredits: true, unlimited: false, balance: "125.5"), CreditBalance(hasCredits: false, unlimited: false, balance: "0"), CreditBalance(hasCredits: true, unlimited: true, balance: nil)][index]
+            accounts[index].resetCredits = RateLimitResetCredits(availableCount: [2, 0, 1][index], earliestExpiresAt: Int(now.timeIntervalSince1970) + 86_400)
         }
         return UsageSnapshot(accounts: accounts, savedAt: now)
     }

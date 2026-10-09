@@ -49,9 +49,7 @@ protocol CodexAccountConnection: AnyObject {
 /// One process and private CODEX_HOME per account.
 @MainActor
 final class CodexConnection: CodexAccountConnection {
-    /// The launchd-owned helper sets this before opening any connections. A
-    /// Foundation Process normally starts a new process group; the worker entry
-    /// rejoins the helper's group so launchd also cleans up Codex after a crash.
+    /// Set before connecting. Workers rejoin the helper's process group for launchd cleanup after a crash.
     static var workerLauncherURL: URL?
 
     static func runWorkerIfRequested() {
@@ -66,8 +64,7 @@ final class CodexConnection: CodexAccountConnection {
         guard setpgid(0, group) == 0 else { _exit(71) }
         // Parent death before joining could otherwise escape launchd's cleanup.
         guard getppid() == parent else { _exit(71) }
-        // The helper ignores these signals while its dispatch sources handle
-        // them. Codex must receive normal signal behavior after exec.
+        // Undo the helper's ignored signals before exec.
         for value in [SIGTERM, SIGINT, SIGHUP] { signal(value, SIG_DFL) }
         var mask = sigset_t()
         sigemptyset(&mask)
@@ -120,7 +117,6 @@ final class CodexConnection: CodexAccountConnection {
         self.localIdentityOnly = false
     }
 
-    // Tests inject temporary homes; production uses app-owned accounts.
     init(accountID: String, executableURL: URL, accountRoot: URL, requestTimeout: TimeInterval, loginTimeout: TimeInterval = 900) {
         self.accountID = accountID
         self.executableURL = executableURL
@@ -447,8 +443,7 @@ final class CodexConnection: CodexAccountConnection {
     private nonisolated static func terminate(_ child: Process, sharesHelperGroup: Bool) {
         guard child.isRunning else { return }
         let pid = child.processIdentifier
-        // Never signal the helper's entire group here: it also owns the other
-        // accounts. npm's Codex launcher forwards this signal to its child.
+        // The helper's group includes other accounts; npm forwards SIGTERM to its child.
         if sharesHelperGroup {
             _ = kill(pid, SIGTERM)
         } else if getpgid(pid) == pid {
@@ -457,8 +452,7 @@ final class CodexConnection: CodexAccountConnection {
             _ = kill(pid, SIGTERM)
         }
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1) {
-            // Keep Process alive for reaping, and only escalate while that
-            // recorded process is still running.
+            // Retain Process for reaping; escalate only while it is running.
             guard child.isRunning else { return }
             if !sharesHelperGroup, getpgid(pid) == pid {
                 _ = kill(-pid, SIGKILL)
@@ -586,7 +580,6 @@ final class CodexConnection: CodexAccountConnection {
         let target = "x86_64-apple-darwin"
         #endif
         let manager = FileManager.default
-        // Resolve npm's embedded and optional-package layouts without running JavaScript.
         struct PackageMetadata: Decodable { let optionalDependencies: [String: String]? }
         let metadata = (try? Data(contentsOf: root.appendingPathComponent("package.json")))
             .flatMap { try? JSONDecoder().decode(PackageMetadata.self, from: $0) }
