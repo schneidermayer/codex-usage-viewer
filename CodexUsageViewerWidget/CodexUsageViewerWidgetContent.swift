@@ -143,7 +143,7 @@ struct CodexUsageViewerWidgetContent: View {
     }
 
     private func credits(_ account: AccountSnapshot) -> some View {
-        resource(account.creditsValue(at: referenceDate), symbol: "c.circle", alignment: .leading,
+        resource(account.creditsValue(at: referenceDate), symbol: "c.circle", alignment: isSmall ? .center : .leading,
                  label: "Available credits", help: "Credits available for additional usage")
     }
 
