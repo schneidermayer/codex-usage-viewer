@@ -97,10 +97,20 @@ final class CodexUsageViewerUITests: XCTestCase {
             XCTAssertTrue(resets.isHittable)
             XCTAssertEqual(credits.label, "Available credits: \(expected.0)")
             XCTAssertEqual(resets.label, "Available usage resets: \(expected.1)")
+            let expiry = app.descendants(matching: .any).matching(identifier: "codexusageviewer.resetExpiry.account-\(index + 1)").firstMatch
+            if expected.1 == "0" {
+                XCTAssertFalse(expiry.exists, "No expiry should be shown when no resets are available.")
+            } else {
+                XCTAssertTrue(expiry.isHittable)
+                XCTAssertTrue(expiry.label.hasPrefix("Next usage reset expires: "))
+                let expiryValue = String(expiry.label.dropFirst("Next usage reset expires: ".count))
+                XCTAssertFalse(expiryValue.isEmpty)
+                XCTAssertNotEqual(expiryValue, "Unknown")
+            }
         }
 
         let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = "Connected accounts with credits and available resets"
+        screenshot.name = "Connected accounts with credits, available resets, and expiry dates"
         screenshot.lifetime = .keepAlways
         add(screenshot)
 

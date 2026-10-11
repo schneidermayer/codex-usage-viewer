@@ -234,7 +234,7 @@ private struct AccountCard: View {
                 }
             }
             .padding(20)
-            .frame(height: 475, alignment: .top)
+            .frame(height: 495, alignment: .top)
             .frame(maxWidth: .infinity)
             .background {
                 RoundedRectangle(cornerRadius: 22)
@@ -513,11 +513,32 @@ private struct AccountResourcesView: View {
     let now: Date
 
     var body: some View {
-        HStack(alignment: .top, spacing: 16) {
-            resource("Credits", symbol: "c.circle", value: account.creditsValue(at: now), key: "credits",
-                     description: "Available credit balance reported by this account.")
-            resource("Usage resets", symbol: "arrow.counterclockwise", value: account.resetsValue(at: now), key: "availableResets",
-                     description: "Earned usage resets available to use. Separate from the automatic reset countdowns.")
+        let resets = account.resetsValue(at: now)
+        // The count's freshness and expiry checks also apply to its expiry date.
+        let expiry = resets != .unknown && resets != .amount("0") ? account.resetCredits?.expiryDate : nil
+        VStack(spacing: 8) {
+            HStack(alignment: .top, spacing: 16) {
+                resource("Credits", symbol: "c.circle", value: account.creditsValue(at: now), key: "credits",
+                         description: "Available credit balance reported by this account.")
+                resource("Usage resets", symbol: "arrow.counterclockwise", value: resets, key: "availableResets",
+                         description: "Earned usage resets available to use. Separate from the automatic reset countdowns.")
+            }
+            if resets != .amount("0") {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("Next reset expires")
+                    Spacer(minLength: 0)
+                    Text(expiry.map { $0.formatted(.dateTime.month(.abbreviated).day().hour().minute()) } ?? "Unknown")
+                        .monospacedDigit()
+                }
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .help(expiry.map { "Earliest reported expiry of available usage resets: \($0.formatted(date: .complete, time: .complete))." }
+                      ?? "The next usage reset expiry is unknown. A fresh account update with an expiry date is required.")
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Next usage reset expires: \(expiry.map { $0.formatted(date: .complete, time: .complete) } ?? "Unknown")")
+                .accessibilityIdentifier("codexusageviewer.resetExpiry.\(account.id)")
+            }
         }
         .padding(.top, 12)
         .overlay(alignment: .top) { Divider().opacity(0.6) }
