@@ -371,10 +371,18 @@ private struct AccountCard: View {
                         resetTime(secondary, label: "Resets in", slot: "secondary", now: now)
                     }
                 } else {
-                    Text("One usage window reported")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Group {
+                        if let resetDate = account.weeklyUsage(at: now).window?.resetDate {
+                            Text(resetDate, format: .dateTime.weekday(.wide).day().month(.wide).year().hour().minute())
+                        } else {
+                            Text("Weekly reset unavailable")
+                        }
+                    }
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("codexusageviewer.weeklyResetDate.\(account.id)")
                 }
             } else {
                 VStack(spacing: 9) {
